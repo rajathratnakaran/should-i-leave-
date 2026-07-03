@@ -214,13 +214,17 @@ function filterWeekday() {
 
     const sheetDay = map[state.selectedDay];
 
-    state.filteredData =
+    state.filteredData = state.rawData.filter(
+        row => row.weekday === sheetDay
+    );
 
-        state.rawData.filter(
+    console.log("Selected Day:", state.selectedDay);
+    console.log("Sheet Day:", sheetDay);
+    console.log("Rows:", state.filteredData.length);
 
-            row => row.weekday === sheetDay
-
-        );
+    if (state.filteredData.length) {
+        console.log(state.filteredData[0]);
+    }
 
 }
 
