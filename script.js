@@ -853,7 +853,7 @@ function calculateRecommendation() {
     state.filteredData.forEach(row => {
 
         const key =
-            `${Number(row.Hour)}:${String(Number(row.Minute)).padStart(2,"0")}`;
+            `${row.hour}:${String(row.min).padStart(2,"0")}`;
 
         if (!minuteGroups[key]) {
 
@@ -861,41 +861,39 @@ function calculateRecommendation() {
 
         }
 
-        minuteGroups[key].push(Number(Number(row.ETA_Min)));
+        minuteGroups[key].push(row.eta);
 
     });
 
     let bestMinute = null;
-
     let bestAverage = Infinity;
 
     Object.entries(minuteGroups).forEach(([minute, values]) => {
 
         const avg = average(values);
 
-        if (avg < bestAverage) {
+        if (!Number.isNaN(avg) && avg < bestAverage) {
 
             bestAverage = avg;
-
             bestMinute = minute;
 
         }
 
     });
 
-   console.log(minuteGroups);
-   console.log(bestMinute);
-   console.log(bestAverage);
+    console.log({
+        bestMinute,
+        bestAverage
+    });
+
     return {
 
         minute: bestMinute,
-
         eta: bestAverage
 
     };
 
 }
-
 /* ===========================================================
    HERO RECOMMENDATION
 =========================================================== */
@@ -904,13 +902,19 @@ function updateRecommendationCard() {
 
     const rec = calculateRecommendation();
 
-    if (!rec) return;
+    if (!rec || !rec.minute) {
+
+        console.warn("No recommendation available");
+
+        return;
+
+    }
 
     const parts = rec.minute.split(":");
 
     const hour = Number(parts[0]);
 
-    const minute = parts[1];
+    const minute = Number(parts[1]);
 
     const ampm = hour >= 12 ? "PM" : "AM";
 
@@ -918,7 +922,7 @@ function updateRecommendationCard() {
         hour > 12 ? hour - 12 : hour;
 
     $("leaveHour").textContent =
-        `${displayHour}:${minute}`;
+        `${String(displayHour).padStart(2,"0")}:${String(minute).padStart(2,"0")}`;
 
     document.querySelector(".ampm").textContent =
         ampm;
@@ -926,11 +930,8 @@ function updateRecommendationCard() {
     $("expectedETA").textContent =
         `${rec.eta.toFixed(1)} mins`;
 
-    const arrival =
-        addMinutes(hour, Number(minute), rec.eta);
-
     $("arrivalTime").textContent =
-        arrival;
+        addMinutes(hour, minute, rec.eta);
 
     $("bestWindow").textContent =
         buildWindow(rec.minute);
