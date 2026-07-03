@@ -883,6 +883,9 @@ function calculateRecommendation() {
 
     });
 
+   console.log(minuteGroups);
+   console.log(bestMinute);
+   console.log(bestAverage);
     return {
 
         minute: bestMinute,
