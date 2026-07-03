@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Commute Intelligence Dashboard</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="style.css">
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script
+src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&libraries=places">
+</script>
+
+</head>
+
+<body>
+
+<div class="background-gradient"></div>
+
+<div class="app">
+
+<header class="topbar">
+
+<div class="logo-section">
+
+<div class="status-dot"></div>
+
+<div>
+
+<h1>Commute Intelligence</h1>
+
+<p>Live Traffic Decision Engine</p>
+
+</div>
+
+</div>
+
+<div class="topbar-right">
+
+<div class="live-pill">
+
+<span class="pulse"></span>
+
+LIVE
+
+</div>
+
+<div class="date-box">
+
+<span id="todayDate"></span>
+
+</div>
+
+</div>
+
+</header>
+
+<nav class="weekday-nav">
+
+<button class="weekday active" data-day="Monday">
+
+Monday
+
+</button>
+
+<button class="weekday" data-day="Wednesday">
+
+Wednesday
+
+</button>
+
+<button class="weekday" data-day="Thursday">
+
+Thursday
+
+</button>
+
+</nav>
+
+<section class="hero-grid">
+
+<div class="hero-card recommendation">
+
+<div class="card-title">
+
+Recommended Departure
+
+</div>
+
+<div class="leave-time">
+
+<span id="leaveHour">
+
+09:54
+
+</span>
+
+<span class="ampm">
+
+AM
+
+</span>
+
+</div>
+
+<div class="recommendation-meta">
+
+<div>
+
+<label>Expected ETA</label>
+
+<strong id="expectedETA">
+
+41 mins
+
+</strong>
+
+</div>
+
+<div>
+
+<label>Arrival</label>
+
+<strong id="arrivalTime">
+
+10:35 AM
+
+</strong>
+
+</div>
+
+<div>
+
+<label>Confidence</label>
+
+<strong id="confidence">
+
+92%
+
+</strong>
+
+</div>
+
+</div>
+
+<div class="recommendation-footer">
+
+If you leave now
+
+<span id="delayNow">
+
++6 min
+
+</span>
+
+</div>
+
+</div>
+
+<div class="hero-card">
+
+<div class="card-title">
+
+Traffic Status
+
+</div>
+
+<div class="traffic-score">
+
+<div class="traffic-circle moderate">
+
+Moderate
+
+</div>
+
+</div>
+
+<div class="traffic-details">
+
+<div>
+
+<label>Current ETA</label>
+
+<strong id="currentETA">
+
+47 min
+
+</strong>
+
+</div>
+
+<div>
+
+<label>Distance</label>
+
+<strong id="distance">
+
+11.7 km
+
+</strong>
+
+</div>
+
+<div>
+
+<label>Speed</label>
+
+<strong id="avgSpeed">
+
+18 km/h
+
+</strong>
+
+</div>
+
+</div>
+
+</div>
+
+<div class="hero-card">
+
+<div class="card-title">
+
+Today's Summary
+
+</div>
+
+<div class="summary-grid">
+
+<div>
+
+<label>Best ETA</label>
+
+<strong id="bestETA">
+
+36 min
+
+</strong>
+
+</div>
+
+<div>
+
+<label>Worst ETA</label>
+
+<strong id="worstETA">
+
+53 min
+
+</strong>
+
+</div>
+
+<div>
+
+<label>Variation</label>
+
+<strong id="variation">
+
+17 min
+
+</strong>
+
+</div>
+
+<div>
+
+<label>Best Window</label>
+
+<strong id="bestWindow">
+
+09:53–09:57
+
+</strong>
+
+</div>
+
+</div>
+
+</div>
+
+</section>
+
+<section class="map-layout">
+
+<div class="panel map-panel">
+
+<div class="panel-header">
+
+<h2>
+
+Live Route
+
+</h2>
+
+<p>
+
+Current Google Maps Traffic
+
+</p>
+
+</div>
+
+<div id="map"></div>
+
+<div class="route-footer">
+
+<div>
+
+<label>
+
+Route
+
+</label>
+
+<strong id="routeName">
+
+Loading...
+
+</strong>
+
+</div>
+
+<div>
+
+<label>
+
+Duration
+
+</label>
+
+<strong id="routeDuration">
+
+--
+
+</strong>
+
+</div>
+
+<div>
+
+<label>
+
+Traffic Delay
+
+</label>
+
+<strong id="trafficDelay">
+
+--
+
+</strong>
+
+</div>
+
+</div>
+
+</div>
+
+<div class="panel quick-stats">
+
+<div class="panel-header">
+
+<h2>
+
+Decision Engine
+
+</h2>
+
+<p>
+
+Current Recommendation
+
+</p>
+
+</div>
+
+<div class="decision-box">
+
+<h3>
+
+Leave Between
+
+</h3>
+
+<div id="decisionWindow">
+
+09:53–09:56
+
+</div>
+
+</div>
+
+<div class="decision-box">
+
+<h3>
+
+Chance ETA Under 40 min
+
+</h3>
+
+<div id="probability">
+
+87%
+
+</div>
+
+</div>
+
+<div class="decision-box">
+
+<h3>
+
+Waiting Saves
+
+</h3>
+
+<div id="timeSaved">
+
+4 min
+
+</div>
+
+</div>
+
+<div class="decision-box">
+
+<h3>
+
+Commute Score
+
+</h3>
+
+<div id="commuteScore">
+
+92 / 100
+
+</div>
+
+</div>
+
+</div>
+
+</section>
+
+<main>
+
+<section class="panel">
+
+<div class="panel-header">
+
+<h2>
+
+Today's Traffic Curve
+
+</h2>
+
+<p>
+
+Historical comparison by weekday
+
+</p>
+
+</div>
+
+<canvas id="trafficChart"></canvas>
+
+</section>
+
+<section class="analytics-grid">
+
+  <div class="panel half">
+
+    <div class="panel-header">
+        <h2>Traffic Heatmap</h2>
+        <p>Minute-by-minute traffic pattern</p>
+    </div>
+
+    <div id="heatmap" class="heatmap-container">
+
+        <!-- generated by script.js -->
+
+    </div>
+
+</div>
+
+<div class="panel half">
+
+    <div class="panel-header">
+        <h2>Weekly Trend</h2>
+        <p>Historical weekday comparison</p>
+    </div>
+
+    <canvas id="weeklyTrendChart"></canvas>
+
+</div>
+
+</section>
+
+<section class="analytics-grid">
+
+<div class="panel half">
+
+    <div class="panel-header">
+        <h2>Reliability</h2>
+        <p>Traffic consistency</p>
+    </div>
+
+    <div class="metric-list">
+
+        <div class="metric-row">
+
+            <span>Average ETA</span>
+
+            <strong id="avgEtaMetric">
+                --
+            </strong>
+
+        </div>
+
+        <div class="metric-row">
+
+            <span>Median ETA</span>
+
+            <strong id="medianEtaMetric">
+                --
+            </strong>
+
+        </div>
+
+        <div class="metric-row">
+
+            <span>95th Percentile</span>
+
+            <strong id="p95Metric">
+                --
+            </strong>
+
+        </div>
+
+        <div class="metric-row">
+
+            <span>Std Deviation</span>
+
+            <strong id="stdMetric">
+                --
+            </strong>
+
+        </div>
+
+        <div class="metric-row">
+
+            <span>Confidence</span>
+
+            <strong id="confidenceMetric">
+                --
+            </strong>
+
+        </div>
+
+    </div>
+
+</div>
+
+<div class="panel half">
+
+    <div class="panel-header">
+
+        <h2>
+
+            Leave-by Calculator
+
+        </h2>
+
+        <p>
+
+            Reverse ETA planning
+
+        </p>
+
+    </div>
+
+    <div class="calculator">
+
+        <label>
+
+            Need to reach office by
+
+        </label>
+
+        <input
+            type="time"
+            id="arrivalInput"
+            value="11:00">
+
+        <button id="calculateButton">
+
+            Calculate
+
+        </button>
+
+        <div class="calculator-result">
+
+            <div>
+
+                Recommended Departure
+
+            </div>
+
+            <h2 id="recommendedDeparture">
+
+                --
+
+            </h2>
+
+            <small>
+
+                Includes expected traffic
+
+            </small>
+
+        </div>
+
+    </div>
+
+</div>
+
+</section>
+
+<section class="panel">
+
+<div class="panel-header">
+
+<h2>
+
+Historical Comparison
+
+</h2>
+
+<p>
+
+Current week vs previous weeks
+
+</p>
+
+</div>
+
+<canvas id="historyChart"></canvas>
+
+</section>
+
+<section class="analytics-grid">
+
+<div class="panel half">
+
+<div class="panel-header">
+
+<h2>
+
+Monthly Scorecard
+
+</h2>
+
+<p>
+
+Personal commute statistics
+
+</p>
+
+</div>
+
+<div class="score-grid">
+
+<div class="score-card">
+
+<span>
+
+Trips
+
+</span>
+
+<h2 id="tripCount">
+
+0
+
+</h2>
+
+</div>
+
+<div class="score-card">
+
+<span>
+
+Average
+
+</span>
+
+<h2 id="monthlyAverage">
+
+--
+
+</h2>
+
+</div>
+
+<div class="score-card">
+
+<span>
+
+Best
+
+</span>
+
+<h2 id="monthlyBest">
+
+--
+
+</h2>
+
+</div>
+
+<div class="score-card">
+
+<span>
+
+Worst
+
+</span>
+
+<h2 id="monthlyWorst">
+
+--
+
+</h2>
+
+</div>
+
+<div class="score-card">
+
+<span>
+
+Time Saved
+
+</span>
+
+<h2 id="timeSavedMonth">
+
+--
+
+</h2>
+
+</div>
+
+<div class="score-card">
+
+<span>
+
+Score
+
+</span>
+
+<h2 id="overallScore">
+
+--
+
+</h2>
+
+</div>
+
+</div>
+
+</div>
+
+<div class="panel half">
+
+<div class="panel-header">
+
+<h2>
+
+Route Comparison
+
+</h2>
+
+<p>
+
+Fastest available routes
+
+</p>
+
+</div>
+
+<div class="routes">
+
+<div class="route-card">
+
+<div>
+
+<h3>
+
+Route A
+
+</h3>
+
+<p id="routeAName">
+
+Outer Ring Road
+
+</p>
+
+</div>
+
+<strong id="routeAETA">
+
+--
+
+</strong>
+
+</div>
+
+<div class="route-card">
+
+<div>
+
+<h3>
+
+Route B
+
+</h3>
+
+<p id="routeBName">
+
+Old Airport Road
+
+</p>
+
+</div>
+
+<strong id="routeBETA">
+
+--
+
+</strong>
+
+</div>
+
+<div class="route-card">
+
+<div>
+
+<h3>
+
+Route C
+
+</h3>
+
+<p id="routeCName">
+
+Marathahalli
+
+</p>
+
+</div>
+
+<strong id="routeCETA">
+
+--
+
+</strong>
+
+</div>
+
+</div>
+
+</div>
+
+</section>
+
+<footer>
+
+<div class="footer-left">
+
+Commute Intelligence Dashboard
+
+</div>
+
+<div class="footer-right">
+
+Powered by Google Sheets • Google Maps • Chart.js
+
+</div>
+
+</footer>
+
+</main>
+
+<script src="script.js"></script>
+
+</div>
+
+</body>
+
+</html>
