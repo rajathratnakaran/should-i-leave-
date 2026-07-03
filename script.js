@@ -1,28 +1,29 @@
-/* ==========================================================
+/* ============================================================
    COMMUTE INTELLIGENCE DASHBOARD
-   Part 1
-   Configuration + State + Utilities
-========================================================== */
+   script.js
+   PART 1
+   Configuration • State • Helpers
+============================================================ */
+
+/* ============================================================
+   CONFIG
+============================================================ */
 
 const CONFIG = {
 
     SHEET_URL:
         "https://script.google.com/macros/s/AKfycbxBpfm1yApsHwDVef9WD2gp0AQBIP8RAAZsDahHKK2qWi9x8co4cSAMD9Ll3_lQxLSKzA/exec",
 
-    MAPS_API_KEY:
-        "",
+    DEFAULT_DAY: "Thursday",
 
-    DEFAULT_DAY:
-        "Thursday",
-
-    DEFAULT_DIRECTION:
-        "A→B"
+    DEFAULT_DIRECTION: "A→B"
 
 };
 
-/* ==========================================================
-   Global State
-========================================================== */
+
+/* ============================================================
+   APP STATE
+============================================================ */
 
 const state = {
 
@@ -30,17 +31,11 @@ const state = {
 
     filteredData: [],
 
-    selectedDay:
-        CONFIG.DEFAULT_DAY,
+    selectedDay: CONFIG.DEFAULT_DAY,
 
-    selectedDirection:
-        CONFIG.DEFAULT_DIRECTION,
+    selectedDirection: CONFIG.DEFAULT_DIRECTION,
 
-    map: null,
-
-    directionsService: null,
-
-    directionsRenderer: null,
+    recommendation: null,
 
     charts: {
 
@@ -50,13 +45,16 @@ const state = {
 
         history: null
 
-    }
+    },
+
+    map: null
 
 };
 
-/* ==========================================================
-   DOM Helpers
-========================================================== */
+
+/* ============================================================
+   DOM HELPERS
+============================================================ */
 
 function $(id) {
 
@@ -66,19 +64,14 @@ function $(id) {
 
 function $all(selector) {
 
-    return [...document.querySelectorAll(selector)];
+    return Array.from(document.querySelectorAll(selector));
 
 }
 
-/* ==========================================================
-   Number Helpers
-========================================================== */
 
-function round(value, decimals = 1) {
-
-    return Number(value.toFixed(decimals));
-
-}
+/* ============================================================
+   NUMBER HELPERS
+============================================================ */
 
 function average(values) {
 
@@ -88,9 +81,9 @@ function average(values) {
 
 }
 
-function sum(values) {
+function round(value, digits = 1) {
 
-    return values.reduce((a, b) => a + b, 0);
+    return Number(Number(value).toFixed(digits));
 
 }
 
@@ -100,15 +93,15 @@ function median(values) {
 
     const sorted = [...values].sort((a, b) => a - b);
 
-    const middle = Math.floor(sorted.length / 2);
+    const mid = Math.floor(sorted.length / 2);
 
     if (sorted.length % 2 === 0) {
 
-        return (sorted[middle - 1] + sorted[middle]) / 2;
+        return (sorted[mid - 1] + sorted[mid]) / 2;
 
     }
 
-    return sorted[middle];
+    return sorted[mid];
 
 }
 
@@ -140,9 +133,16 @@ function standardDeviation(values) {
 
 }
 
-/* ==========================================================
-   Time Helpers
-========================================================== */
+
+/* ============================================================
+   TIME HELPERS
+============================================================ */
+
+function pad(value) {
+
+    return String(value).padStart(2, "0");
+
+}
 
 function to12Hour(hour) {
 
@@ -158,13 +158,19 @@ function formatTime(hour, minute) {
 
     const ampm = hour >= 12 ? "PM" : "AM";
 
-    return `${to12Hour(hour)}:${String(minute).padStart(2, "0")} ${ampm}`;
+    return `${to12Hour(hour)}:${pad(minute)} ${ampm}`;
 
 }
 
-function addMinutes(hour, minute, minsToAdd) {
+function minuteKey(hour, minute) {
 
-    const total = hour * 60 + minute + Math.round(minsToAdd);
+    return `${hour}:${pad(minute)}`;
+
+}
+
+function addMinutes(hour, minute, mins) {
+
+    const total = (hour * 60) + minute + Math.round(mins);
 
     const h = Math.floor(total / 60) % 24;
 
@@ -174,9 +180,9 @@ function addMinutes(hour, minute, minsToAdd) {
 
 }
 
-function subtractMinutes(hour, minute, minsToSubtract) {
+function subtractMinutes(hour, minute, mins) {
 
-    const total = hour * 60 + minute - Math.round(minsToSubtract);
+    const total = (hour * 60) + minute - Math.round(mins);
 
     const h = ((Math.floor(total / 60) % 24) + 24) % 24;
 
@@ -186,17 +192,12 @@ function subtractMinutes(hour, minute, minsToSubtract) {
 
 }
 
-function minuteKey(hour, minute) {
 
-    return `${hour}:${String(minute).padStart(2, "0")}`;
+/* ============================================================
+   DATE HELPERS
+============================================================ */
 
-}
-
-/* ==========================================================
-   Date Helpers
-========================================================== */
-
-function getTodayString() {
+function todayString() {
 
     return new Date().toLocaleDateString(
 
@@ -216,225 +217,207 @@ function getTodayString() {
 
 }
 
-function normalizeWeekday(day) {
-
-    return day.substring(0, 3).toLowerCase();
-
-}
-
-/* ==========================================================
-   Dashboard Helper
-========================================================== */
-
 function setTodayDate() {
 
-    $("todayDate").textContent = getTodayString();
+    const el = $("todayDate");
+
+    if (!el) return;
+
+    el.textContent = todayString();
 
 }
 
-console.log("✓ Part 1 Loaded");
 
-/* ==========================================================
-   Part 2
-   Load Google Sheet Data
-========================================================== */
+/* ============================================================
+   WEEKDAY HELPERS
+============================================================ */
+
+function shortDay(day) {
+
+    const map = {
+
+        Monday: "Mon",
+
+        Tuesday: "Tue",
+
+        Wednesday: "Wed",
+
+        Thursday: "Thu",
+
+        Friday: "Fri",
+
+        Saturday: "Sat",
+
+        Sunday: "Sun"
+
+    };
+
+    return map[day];
+
+}
+
+
+/* ============================================================
+   LOG
+============================================================ */
+
+console.log("✓ Script Part 1 Loaded");
+
+/* ============================================================
+   PART 2
+   Load Data • Filter Data
+============================================================ */
+
+/* ============================================================
+   LOAD DATA
+============================================================ */
 
 async function loadData() {
 
     try {
 
-        console.log("Loading commute data...");
+        console.log("Loading data...");
 
         const response = await fetch(CONFIG.SHEET_URL);
 
         if (!response.ok) {
 
-            throw new Error(
-                `HTTP ${response.status}`
-            );
+            throw new Error(`HTTP ${response.status}`);
 
         }
 
         const json = await response.json();
 
-        console.log(
-            "Rows received:",
-            json.length
-        );
+        console.log(`Rows received: ${json.length}`);
 
-       state.rawData = json.map(...);
+        state.rawData = json.map(row => ({
 
-filterData();
+            timestamp: new Date(row.Timestamp),
 
-initializeUI();
+            weekday: row.Weekday,
 
-refreshDashboard();
+            direction: row.Direction,
 
-}
+            eta: Number(row.ETA_Min),
 
-    catch(err){
+            distance: Number(row.Distance_KM),
 
-        console.error(
-            "Unable to load data",
-            err
-        );
+            apiCall: Number(row.API_Call_Number),
+
+            status: row.Status,
+
+            hour: Number(row.Hour),
+
+            minute: Number(row.Minute),
+
+            date: row.Date
+
+        }));
+
+        console.table(state.rawData.slice(0, 5));
+
+        filterData();
+
+        refreshDashboard();
+
+    }
+
+    catch (error) {
+
+        console.error("Unable to load data");
+
+        console.error(error);
 
     }
 
 }
 
-/* ==========================================================
-   Filter Dataset
-========================================================== */
 
-function filterData(){
+/* ============================================================
+   FILTER DATA
+============================================================ */
 
-    const dayMap={
+function filterData() {
 
-        Monday:"Mon",
+    const day = shortDay(state.selectedDay);
 
-        Tuesday:"Tue",
-
-        Wednesday:"Wed",
-
-        Thursday:"Thu",
-
-        Friday:"Fri",
-
-        Saturday:"Sat",
-
-        Sunday:"Sun"
-
-    };
-
-    const shortDay=
-        dayMap[state.selectedDay];
-
-    state.filteredData=
-        state.rawData.filter(row=>
-
-            row.weekday===shortDay &&
-
-            row.direction===state.selectedDirection &&
-
-            row.status==="SUCCESS"
-
-        );
-
-    state.filteredData.sort((a,b)=>{
+    state.filteredData = state.rawData.filter(row => {
 
         return (
 
-            a.hour*60+a.minute
+            row.weekday === day &&
 
-        )-
+            row.direction === state.selectedDirection &&
 
-        (
-
-            b.hour*60+b.minute
+            row.status === "SUCCESS"
 
         );
 
     });
 
-    console.log(
-        "Selected Day:",
-        state.selectedDay
-    );
+    state.filteredData.sort((a, b) => {
+
+        const t1 = (a.hour * 60) + a.minute;
+
+        const t2 = (b.hour * 60) + b.minute;
+
+        return t1 - t2;
+
+    });
 
     console.log(
-        "Direction:",
+
+        `Filtered ${state.filteredData.length} rows`
+
+    );
+
+}
+
+
+/* ============================================================
+   DASHBOARD PLACEHOLDER
+============================================================ */
+
+function refreshDashboard() {
+
+    console.log(
+
+        "Dashboard refresh",
+
+        state.selectedDay,
+
         state.selectedDirection
+
     );
 
-    console.log(
-        "Filtered Rows:",
-        state.filteredData.length
-    );
-
-    if(state.filteredData.length){
-
-        console.log(
-            state.filteredData[0]
-        );
-
-    }
-
 }
+/* ============================================================
+   PART 3
+   UI EVENTS
+============================================================ */
 
-/* ==========================================================
-   Dashboard Refresh
-========================================================== */
+/* ============================================================
+   WEEKDAY BUTTONS
+============================================================ */
 
-function refreshDashboard(){
+function initializeWeekdayButtons() {
 
-    if(!state.filteredData.length){
-
-        console.warn("No data");
-
-        return;
-
-    }
-
-    updateRecommendationCard();
-
-    updateHeroCards();
-
-    updateDecisionPanel();
-
-    renderTrafficChart();
-
-    renderWeeklyTrend();
-
-    renderHeatmap();
-
-    updateReliability();
-
-    updateMonthlyStats();
-
-}
-
-/* ==========================================================
-   Start App
-========================================================== */
-
-document.addEventListener(
-
-    "DOMContentLoaded",
-
-    ()=>{
-
-        setTodayDate();
-
-        loadData();
-
-    }
-
-);
-
-console.log("✓ Part 2 Loaded");
-
-/* ==========================================================
-   Part 3
-   UI Events
-========================================================== */
-
-function setupWeekdayButtons() {
-
-    const buttons =
-        $all(".weekday");
+    const buttons = $all(".weekday");
 
     buttons.forEach(button => {
 
         button.addEventListener("click", () => {
 
-            buttons.forEach(btn =>
-                btn.classList.remove("active")
-            );
+            buttons.forEach(b => {
+
+                b.classList.remove("active");
+
+            });
 
             button.classList.add("active");
 
             state.selectedDay =
+
                 button.dataset.day;
 
             filterData();
@@ -447,22 +430,29 @@ function setupWeekdayButtons() {
 
 }
 
-function setupDirectionButtons() {
 
-    const buttons =
-        $all(".direction");
+/* ============================================================
+   DIRECTION BUTTONS
+============================================================ */
+
+function initializeDirectionButtons() {
+
+    const buttons = $all(".direction");
 
     buttons.forEach(button => {
 
         button.addEventListener("click", () => {
 
-            buttons.forEach(btn =>
-                btn.classList.remove("active")
-            );
+            buttons.forEach(b => {
+
+                b.classList.remove("active");
+
+            });
 
             button.classList.add("active");
 
             state.selectedDirection =
+
                 button.dataset.direction;
 
             filterData();
@@ -475,53 +465,60 @@ function setupDirectionButtons() {
 
 }
 
-/* ==========================================================
-   Initialize UI
-========================================================== */
+
+/* ============================================================
+   INITIALIZE UI
+============================================================ */
 
 function initializeUI() {
 
-    setupWeekdayButtons();
+    initializeWeekdayButtons();
 
-    setupDirectionButtons();
+    initializeDirectionButtons();
 
 }
 
-/* ==========================================================
-   Update loadData()
-========================================================== */
 
-/*
-Inside loadData()
+/* ============================================================
+   APPLICATION START
+============================================================ */
 
-Replace
+document.addEventListener(
 
-    filterData();
+    "DOMContentLoaded",
 
-with
+    async () => {
 
-    filterData();
+        setTodayDate();
 
-    initializeUI();
+        initializeUI();
 
-    refreshDashboard();
+        await loadData();
 
-*/
+    }
 
-/* ==========================================================
-   Console
-========================================================== */
+);
 
-console.log("✓ Part 3 Loaded");
+console.log(
 
-/* ==========================================================
-   Part 4
-   Recommendation Engine
-========================================================== */
+    "✓ Script Part 3 Loaded"
+
+);
+
+/* ============================================================
+   PART 4
+   RECOMMENDATION ENGINE
+============================================================ */
+
+/* ============================================================
+   CALCULATE BEST DEPARTURE
+============================================================ */
 
 function calculateRecommendation() {
 
     if (!state.filteredData.length) {
+
+        state.recommendation = null;
 
         return null;
 
@@ -531,13 +528,7 @@ function calculateRecommendation() {
 
     state.filteredData.forEach(row => {
 
-        const key = minuteKey(
-
-            row.hour,
-
-            row.minute
-
-        );
+        const key = minuteKey(row.hour, row.minute);
 
         if (!minuteGroups[key]) {
 
@@ -551,15 +542,15 @@ function calculateRecommendation() {
 
     let bestMinute = null;
 
-    let bestAverage = Infinity;
+    let bestETA = Number.MAX_VALUE;
 
     Object.entries(minuteGroups).forEach(([minute, values]) => {
 
         const avg = average(values);
 
-        if (avg < bestAverage) {
+        if (avg < bestETA) {
 
-            bestAverage = avg;
+            bestETA = avg;
 
             bestMinute = minute;
 
@@ -567,13 +558,11 @@ function calculateRecommendation() {
 
     });
 
-    return {
+    const confidence = Math.max(
 
-        minute: bestMinute,
+        50,
 
-        eta: round(bestAverage),
-
-        confidence: Math.min(
+        Math.min(
 
             99,
 
@@ -581,107 +570,77 @@ function calculateRecommendation() {
 
                 100 -
 
-                (
+                standardDeviation(
 
-                    standardDeviation(
+                    state.filteredData.map(r => r.eta)
 
-                        state.filteredData.map(r => r.eta)
-
-                    ) * 4
-
-                )
+                ) * 4
 
             )
 
         )
 
+    );
+
+    state.recommendation = {
+
+        minute: bestMinute,
+
+        eta: round(bestETA),
+
+        confidence
+
     };
 
-}
-
-/* ==========================================================
-   Best Window
-========================================================== */
-
-function buildWindow(minuteString) {
-
-    const parts = minuteString.split(":");
-
-    const h = Number(parts[0]);
-
-    const m = Number(parts[1]);
-
-    const start = formatTime(h, Math.max(0, m - 1));
-
-    const end = formatTime(h, Math.min(59, m + 2));
-
-    return `${start} – ${end}`;
+    return state.recommendation;
 
 }
 
-/* ==========================================================
-   Hero Card
-========================================================== */
 
-function updateRecommendationCard() {
+/* ============================================================
+   BEST WINDOW
+============================================================ */
 
-    const rec = calculateRecommendation();
+function recommendationWindow() {
 
-    if (!rec) {
+    if (!state.recommendation) return "--";
 
-        return;
-
-    }
-
-    const parts = rec.minute.split(":");
+    const parts = state.recommendation.minute.split(":");
 
     const hour = Number(parts[0]);
 
     const minute = Number(parts[1]);
 
-    $("leaveHour").textContent =
+    const start = formatTime(
 
-        `${to12Hour(hour)}:${String(minute).padStart(2, "0")}`;
+        hour,
 
-    document.querySelector(".ampm").textContent =
+        Math.max(0, minute - 2)
 
-        hour >= 12 ? "PM" : "AM";
+    );
 
-    $("expectedETA").textContent =
+    const end = formatTime(
 
-        `${rec.eta} mins`;
+        hour,
 
-    $("arrivalTime").textContent =
+        Math.min(59, minute + 2)
 
-        addMinutes(
+    );
 
-            hour,
-
-            minute,
-
-            rec.eta
-
-        );
-
-    $("confidence").textContent =
-
-        `${rec.confidence}%`;
-
-    $("bestWindow").textContent =
-
-        buildWindow(rec.minute);
+    return `${start} – ${end}`;
 
 }
 
-/* ==========================================================
-   Current Metrics
-========================================================== */
 
-function updateHeroCards() {
+/* ============================================================
+   CURRENT STATISTICS
+============================================================ */
+
+function currentStatistics() {
 
     if (!state.filteredData.length) {
 
-        return;
+        return null;
 
     }
 
@@ -689,136 +648,365 @@ function updateHeroCards() {
 
         state.filteredData.map(r => r.eta);
 
-    const current =
+    return {
 
-        state.filteredData[0];
+        current:
 
-    $("currentETA").textContent =
+            state.filteredData[0],
 
-        `${round(current.eta)} min`;
+        average:
 
-    $("distance").textContent =
+            average(etas),
 
-        `${round(current.distance,2)} km`;
+        minimum:
 
-    const avgSpeed =
+            Math.min(...etas),
 
-        current.distance /
+        maximum:
 
-        (current.eta / 60);
+            Math.max(...etas),
 
-    $("avgSpeed").textContent =
-
-        `${round(avgSpeed)} km/h`;
-
-    $("bestETA").textContent =
-
-        `${round(Math.min(...etas))} min`;
-
-    $("worstETA").textContent =
-
-        `${round(Math.max(...etas))} min`;
-
-    $("variation").textContent =
-
-        `${round(
+        variation:
 
             Math.max(...etas) -
 
             Math.min(...etas)
 
-        )} min";
+    };
 
 }
 
-/* ==========================================================
-   Decision Panel
-========================================================== */
+
+/* ============================================================
+   DASHBOARD REFRESH
+============================================================ */
+
+function refreshDashboard() {
+
+    calculateRecommendation();
+
+    console.log(
+
+        "Dashboard refreshed"
+
+    );
+
+    console.log(
+
+        state.recommendation
+
+    );
+
+}
+/* ============================================================
+   PART 5
+   HERO CARDS
+============================================================ */
+
+/* ============================================================
+   UPDATE HERO CARD
+============================================================ */
+
+function updateRecommendationCard() {
+
+    if (!state.recommendation) return;
+
+    const parts = state.recommendation.minute.split(":");
+
+    const hour = Number(parts[0]);
+
+    const minute = Number(parts[1]);
+
+    if ($("leaveHour")) {
+
+        $("leaveHour").textContent =
+
+            `${to12Hour(hour)}:${pad(minute)}`;
+
+    }
+
+    const ampm = document.querySelector(".ampm");
+
+    if (ampm) {
+
+        ampm.textContent =
+
+            hour >= 12 ? "PM" : "AM";
+
+    }
+
+    if ($("expectedETA")) {
+
+        $("expectedETA").textContent =
+
+            `${state.recommendation.eta} mins`;
+
+    }
+
+    if ($("arrivalTime")) {
+
+        $("arrivalTime").textContent =
+
+            addMinutes(
+
+                hour,
+
+                minute,
+
+                state.recommendation.eta
+
+            );
+
+    }
+
+    if ($("confidence")) {
+
+        $("confidence").textContent =
+
+            `${state.recommendation.confidence}%`;
+
+    }
+
+    if ($("bestWindow")) {
+
+        $("bestWindow").textContent =
+
+            recommendationWindow();
+
+    }
+
+}
+
+
+/* ============================================================
+   UPDATE TRAFFIC CARD
+============================================================ */
+
+function updateTrafficCard() {
+
+    const stats = currentStatistics();
+
+    if (!stats) return;
+
+    if ($("currentETA")) {
+
+        $("currentETA").textContent =
+
+            `${round(stats.current.eta)} min`;
+
+    }
+
+    if ($("distance")) {
+
+        $("distance").textContent =
+
+            `${round(stats.current.distance,2)} km`;
+
+    }
+
+    const speed =
+
+        stats.current.distance /
+
+        (stats.current.eta / 60);
+
+    if ($("avgSpeed")) {
+
+        $("avgSpeed").textContent =
+
+            `${round(speed)} km/h`;
+
+    }
+
+}
+
+
+/* ============================================================
+   UPDATE SUMMARY CARD
+============================================================ */
+
+function updateSummaryCard() {
+
+    const stats = currentStatistics();
+
+    if (!stats) return;
+
+    if ($("bestETA")) {
+
+        $("bestETA").textContent =
+
+            `${round(stats.minimum)} min`;
+
+    }
+
+    if ($("worstETA")) {
+
+        $("worstETA").textContent =
+
+            `${round(stats.maximum)} min`;
+
+    }
+
+    if ($("variation")) {
+
+        $("variation").textContent =
+
+            `${round(stats.variation)} min`;
+
+    }
+
+    if ($("decisionWindow")) {
+
+        $("decisionWindow").textContent =
+
+            recommendationWindow();
+
+    }
+
+}
+
+
+/* ============================================================
+   UPDATE DECISION PANEL
+============================================================ */
 
 function updateDecisionPanel() {
 
-    const rec = calculateRecommendation();
-
-    if (!rec) return;
-
-    $("decisionWindow").textContent =
-
-        buildWindow(rec.minute);
+    if (!state.filteredData.length) return;
 
     const under40 =
 
         state.filteredData.filter(
 
-            r => r.eta <= 40
+            row => row.eta <= 40
 
         ).length;
 
-    $("probability").textContent =
+    if ($("probability")) {
 
-        `${Math.round(
+        $("probability").textContent =
 
-            under40 /
+            `${Math.round(
 
-            state.filteredData.length *
+                under40 /
 
-            100
+                state.filteredData.length *
 
-        )}%`;
+                100
 
-    const current =
-
-        state.filteredData[0].eta;
-
-    $("timeSaved").textContent =
-
-        `${Math.max(
-
-            0,
-
-            Math.round(current - rec.eta)
-
-        )} min`;
-
-    $("commuteScore").textContent =
-
-        `${Math.round(
-
-            100 -
-
-            average(
-
-                state.filteredData.map(r=>r.eta)
-
-            )
-
-        )}/100`;
-
-}
-
-console.log("✓ Part 4 Loaded");
-
-/* ==========================================================
-   Part 5
-   Traffic Curve Chart
-========================================================== */
-
-function renderTrafficChart() {
-
-    if (!state.filteredData.length) {
-
-        return;
+            )}%`;
 
     }
 
-    const labels = state.filteredData.map(row =>
+    if ($("timeSaved")) {
 
-        `${row.hour}:${String(row.minute).padStart(2,"0")}`
+        const current =
+
+            state.filteredData[0].eta;
+
+        const saved =
+
+            Math.max(
+
+                0,
+
+                Math.round(
+
+                    current -
+
+                    state.recommendation.eta
+
+                )
+
+            );
+
+        $("timeSaved").textContent =
+
+            `${saved} min`;
+
+    }
+
+    if ($("commuteScore")) {
+
+        const score =
+
+            Math.max(
+
+                1,
+
+                Math.round(
+
+                    100 -
+
+                    average(
+
+                        state.filteredData.map(
+
+                            r => r.eta
+
+                        )
+
+                    )
+
+                )
+
+            );
+
+        $("commuteScore").textContent =
+
+            `${score}/100`;
+
+    }
+
+}
+
+
+/* ============================================================
+   REFRESH DASHBOARD
+============================================================ */
+
+function refreshDashboard() {
+
+    calculateRecommendation();
+
+    updateRecommendationCard();
+
+    updateTrafficCard();
+
+    updateSummaryCard();
+
+    updateDecisionPanel();
+
+    console.log(
+
+        "Dashboard updated."
 
     );
 
-    const values = state.filteredData.map(row => row.eta);
+}
 
-    const ctx = $("trafficChart").getContext("2d");
+console.log(
+
+    "✓ Script Part 5 Loaded"
+
+);
+
+/* ============================================================
+   PART 6
+   TRAFFIC CHART
+============================================================ */
+
+/* ============================================================
+   TRAFFIC CHART
+============================================================ */
+
+function renderTrafficChart() {
+
+    const canvas = $("trafficChart");
+
+    if (!canvas) return;
+
+    if (!state.filteredData.length) return;
 
     if (state.charts.traffic) {
 
@@ -826,99 +1014,135 @@ function renderTrafficChart() {
 
     }
 
-    state.charts.traffic = new Chart(ctx, {
+    const labels = state.filteredData.map(row =>
 
-        type: "line",
+        `${pad(row.hour)}:${pad(row.minute)}`
 
-        data: {
+    );
 
-            labels,
+    const eta = state.filteredData.map(row => row.eta);
 
-            datasets: [
+    state.charts.traffic = new Chart(
 
-                {
+        canvas,
 
-                    label: "ETA (mins)",
+        {
 
-                    data: values,
+            type: "line",
 
-                    borderColor: "#2dd4bf",
+            data: {
 
-                    backgroundColor: "rgba(45,212,191,.15)",
+                labels,
 
-                    borderWidth: 3,
+                datasets: [
 
-                    pointRadius: 0,
+                    {
 
-                    pointHoverRadius: 5,
+                        label: "ETA",
 
-                    tension: .35,
+                        data: eta,
 
-                    fill: true
+                        borderColor: "#2dd4bf",
 
-                }
+                        backgroundColor:
 
-            ]
+                            "rgba(45,212,191,.15)",
 
-        },
+                        borderWidth: 3,
 
-        options: {
+                        tension: .35,
 
-            responsive: true,
+                        fill: true,
 
-            maintainAspectRatio: false,
+                        pointRadius: 2,
 
-            interaction: {
+                        pointHoverRadius: 6
 
-                intersect: false,
+                    }
 
-                mode: "index"
-
-            },
-
-            plugins: {
-
-                legend: {
-
-                    display: false
-
-                }
+                ]
 
             },
 
-            scales: {
+            options: {
 
-                x: {
+                responsive: true,
 
-                    ticks: {
+                maintainAspectRatio: false,
 
-                        color: "#94a3b8",
+                plugins: {
 
-                        maxTicksLimit: 12
+                    legend: {
+
+                        display: false
 
                     },
 
-                    grid: {
+                    tooltip: {
 
-                        color: "rgba(255,255,255,.05)"
+                        callbacks: {
+
+                            label(context) {
+
+                                return `${context.parsed.y.toFixed(1)} mins`;
+
+                            }
+
+                        }
 
                     }
 
                 },
 
-                y: {
+                interaction: {
 
-                    beginAtZero: false,
+                    mode: "index",
 
-                    ticks: {
+                    intersect: false
 
-                        color: "#94a3b8"
+                },
+
+                scales: {
+
+                    x: {
+
+                        grid: {
+
+                            color: "rgba(255,255,255,.05)"
+
+                        },
+
+                        ticks: {
+
+                            color: "#94a3b8",
+
+                            maxTicksLimit: 10
+
+                        }
 
                     },
 
-                    grid: {
+                    y: {
 
-                        color: "rgba(255,255,255,.05)"
+                        beginAtZero: false,
+
+                        grid: {
+
+                            color: "rgba(255,255,255,.05)"
+
+                        },
+
+                        ticks: {
+
+                            color: "#94a3b8",
+
+                            callback(value) {
+
+                                return value + "m";
+
+                            }
+
+                        }
 
                     }
 
@@ -928,33 +1152,62 @@ function renderTrafficChart() {
 
         }
 
-    });
+    );
 
 }
 
-/* ==========================================================
-   Weekly Trend
-========================================================== */
+
+/* ============================================================
+   WEEKLY TREND
+============================================================ */
 
 function renderWeeklyTrend() {
 
-    const weekdays = [
+    const canvas = $("weeklyTrendChart");
 
-        "Mon",
+    if (!canvas) return;
 
-        "Wed",
+    if (state.charts.weekly) {
 
-        "Thu"
+        state.charts.weekly.destroy();
+
+    }
+
+    const days = [
+
+        {
+
+            name: "Monday",
+
+            code: "Mon"
+
+        },
+
+        {
+
+            name: "Wednesday",
+
+            code: "Wed"
+
+        },
+
+        {
+
+            name: "Thursday",
+
+            code: "Thu"
+
+        }
 
     ];
 
-    const averages = weekdays.map(day => {
+    const averages = days.map(day => {
 
-        const rows = state.rawData.filter(r =>
+        const rows = state.rawData.filter(row =>
 
-            r.weekday === day &&
+            row.weekday === day.code &&
 
-            r.direction === state.selectedDirection
+            row.direction === state.selectedDirection
 
         );
 
@@ -968,97 +1221,95 @@ function renderWeeklyTrend() {
 
     });
 
-    const ctx = $("weeklyTrendChart").getContext("2d");
+    state.charts.weekly = new Chart(
 
-    if (state.charts.weekly) {
+        canvas,
 
-        state.charts.weekly.destroy();
+        {
 
-    }
+            type: "bar",
 
-    state.charts.weekly = new Chart(ctx, {
+            data: {
 
-        type: "bar",
+                labels: days.map(d => d.name),
 
-        data: {
+                datasets: [
 
-            labels: [
+                    {
 
-                "Monday",
+                        data: averages,
 
-                "Wednesday",
+                        backgroundColor: [
 
-                "Thursday"
+                            "#22c55e",
 
-            ],
+                            "#3b82f6",
 
-            datasets: [
+                            "#f59e0b"
 
-                {
+                        ],
 
-                    data: averages,
+                        borderRadius: 8
 
-                    backgroundColor: [
+                    }
 
-                        "#2dd4bf",
-
-                        "#60a5fa",
-
-                        "#f59e0b"
-
-                    ]
-
-                }
-
-            ]
-
-        },
-
-        options: {
-
-            responsive: true,
-
-            maintainAspectRatio: false,
-
-            plugins: {
-
-                legend: {
-
-                    display: false
-
-                }
+                ]
 
             },
 
-            scales: {
+            options: {
 
-                y: {
+                responsive: true,
 
-                    ticks: {
+                maintainAspectRatio: false,
 
-                        color:"#94a3b8"
+                plugins: {
 
-                    },
+                    legend: {
 
-                    grid:{
-
-                        color:"rgba(255,255,255,.05)"
+                        display: false
 
                     }
 
                 },
 
-                x:{
+                scales: {
 
-                    ticks:{
+                    x: {
 
-                        color:"#94a3b8"
+                        grid: {
+
+                            display: false
+
+                        },
+
+                        ticks: {
+
+                            color: "#94a3b8"
+
+                        }
 
                     },
 
-                    grid:{
+                    y: {
 
-                        display:false
+                        grid: {
+
+                            color: "rgba(255,255,255,.05)"
+
+                        },
+
+                        ticks: {
+
+                            color: "#94a3b8",
+
+                            callback(value) {
+
+                                return value + "m";
+
+                            }
+
+                        }
 
                     }
 
@@ -1068,16 +1319,53 @@ function renderWeeklyTrend() {
 
         }
 
-    });
+    );
 
 }
 
-console.log("✓ Part 5 Loaded");
 
-/* ==========================================================
-   Part 6
-   Traffic Heatmap
-========================================================== */
+/* ============================================================
+   REFRESH DASHBOARD
+============================================================ */
+
+function refreshDashboard() {
+
+    calculateRecommendation();
+
+    updateRecommendationCard();
+
+    updateTrafficCard();
+
+    updateSummaryCard();
+
+    updateDecisionPanel();
+
+    renderTrafficChart();
+
+    renderWeeklyTrend();
+
+    console.log(
+
+        "Dashboard updated."
+
+    );
+
+}
+
+console.log(
+
+    "✓ Script Part 6 Loaded"
+
+);
+
+/* ============================================================
+   PART 7
+   HEATMAP + RELIABILITY
+============================================================ */
+
+/* ============================================================
+   HEATMAP
+============================================================ */
 
 function renderHeatmap() {
 
@@ -1087,26 +1375,13 @@ function renderHeatmap() {
 
     container.innerHTML = "";
 
-    if (!state.filteredData.length) {
+    if (!state.filteredData.length) return;
 
-        container.innerHTML =
-            "<div class='heatmap-empty'>No data available</div>";
+    const etas = state.filteredData.map(r => r.eta);
 
-        return;
+    const minETA = Math.min(...etas);
 
-    }
-
-    const minETA = Math.min(
-
-        ...state.filteredData.map(r => r.eta)
-
-    );
-
-    const maxETA = Math.max(
-
-        ...state.filteredData.map(r => r.eta)
-
-    );
+    const maxETA = Math.max(...etas);
 
     state.filteredData.forEach(row => {
 
@@ -1118,58 +1393,24 @@ function renderHeatmap() {
 
             (row.eta - minETA) /
 
-            (maxETA - minETA || 1);
+            ((maxETA - minETA) || 1);
 
-        let color;
+        let colour = "#22c55e";
 
-        if (ratio < .15) {
+        if (ratio > .20) colour = "#84cc16";
 
-            color = "#10b981";
+        if (ratio > .40) colour = "#facc15";
 
-        }
+        if (ratio > .60) colour = "#fb923c";
 
-        else if (ratio < .30) {
+        if (ratio > .80) colour = "#ef4444";
 
-            color = "#34d399";
-
-        }
-
-        else if (ratio < .45) {
-
-            color = "#84cc16";
-
-        }
-
-        else if (ratio < .60) {
-
-            color = "#facc15";
-
-        }
-
-        else if (ratio < .75) {
-
-            color = "#fb923c";
-
-        }
-
-        else if (ratio < .90) {
-
-            color = "#f97316";
-
-        }
-
-        else {
-
-            color = "#ef4444";
-
-        }
-
-        cell.style.background = color;
+        cell.style.background = colour;
 
         cell.title =
 
-            `${row.hour}:${String(row.minute).padStart(2,"0")}
-ETA ${row.eta.toFixed(1)} mins`;
+            `${pad(row.hour)}:${pad(row.minute)}
+ETA ${round(row.eta)} mins`;
 
         container.appendChild(cell);
 
@@ -1177,150 +1418,198 @@ ETA ${row.eta.toFixed(1)} mins`;
 
 }
 
-/* ==========================================================
-   Part 7
-   Reliability Metrics
-========================================================== */
+
+/* ============================================================
+   RELIABILITY
+============================================================ */
 
 function updateReliability() {
 
-    if (!state.filteredData.length) {
+    if (!state.filteredData.length) return;
 
-        return;
-
-    }
-
-    const etas =
+    const eta =
 
         state.filteredData.map(r => r.eta);
 
-    const avg = average(etas);
+    const avg = average(eta);
 
-    const med = median(etas);
+    const med = median(eta);
 
-    const p95 = percentile(etas,95);
+    const p95 = percentile(eta,95);
 
-    const std = standardDeviation(etas);
+    const std = standardDeviation(eta);
 
-    const confidence = Math.max(
+    const confidence =
 
-        50,
+        Math.max(
 
-        Math.min(
+            50,
 
-            99,
+            Math.min(
 
-            Math.round(
+                99,
 
-                100 - std * 4
+                Math.round(
+
+                    100 - std * 4
+
+                )
 
             )
 
-        )
+        );
 
-    );
+    if ($("avgEtaMetric")) {
 
-    $("avgEtaMetric").textContent =
+        $("avgEtaMetric").textContent =
 
-        `${round(avg)} min`;
-
-    $("medianEtaMetric").textContent =
-
-        `${round(med)} min`;
-
-    $("p95Metric").textContent =
-
-        `${round(p95)} min`;
-
-    $("stdMetric").textContent =
-
-        `${round(std)} min`;
-
-    $("confidenceMetric").textContent =
-
-        `${confidence}%`;
-
-}
-
-
-/* ==========================================================
-   Monthly Statistics
-========================================================== */
-
-function updateMonthlyStats() {
-
-    if (!state.filteredData.length) {
-
-        return;
+            `${round(avg)} min`;
 
     }
 
-    const etas =
+    if ($("medianEtaMetric")) {
 
-        state.filteredData.map(r => r.eta);
+        $("medianEtaMetric").textContent =
 
-    const avg = average(etas);
+            `${round(med)} min`;
 
-    const best = Math.min(...etas);
+    }
 
-    const worst = Math.max(...etas);
+    if ($("p95Metric")) {
 
-    $("tripCount").textContent =
+        $("p95Metric").textContent =
 
-        state.filteredData.length;
+            `${round(p95)} min`;
 
-    $("monthlyAverage").textContent =
+    }
 
-        `${round(avg)} min`;
+    if ($("stdMetric")) {
 
-    $("monthlyBest").textContent =
+        $("stdMetric").textContent =
 
-        `${round(best)} min`;
+            `${round(std)} min`;
 
-    $("monthlyWorst").textContent =
+    }
 
-        `${round(worst)} min`;
+    if ($("confidenceMetric")) {
 
-    const saved =
+        $("confidenceMetric").textContent =
 
-        (worst - avg) *
+            `${confidence}%`;
 
-        state.filteredData.length;
-
-    $("timeSavedMonth").textContent =
-
-        `${Math.round(saved)} min`;
-
-    const score = Math.max(
-
-        1,
-
-        Math.round(
-
-            100 -
-
-            avg
-
-        )
-
-    );
-
-    $("overallScore").textContent =
-
-        `${score}/100`;
+    }
 
 }
 
-/* ==========================================================
-   Part 8
-   History • Calculator • Insights
-========================================================== */
 
-/* ==========================================================
-   Historical Comparison
-========================================================== */
+/* ============================================================
+   MONTHLY SCORECARD
+============================================================ */
 
-function updateHistoryChart() {
+function updateMonthlyScorecard() {
+
+    if (!state.filteredData.length) return;
+
+    const eta =
+
+        state.filteredData.map(r => r.eta);
+
+    const avg = average(eta);
+
+    const best = Math.min(...eta);
+
+    const worst = Math.max(...eta);
+
+    if ($("tripCount")) {
+
+        $("tripCount").textContent =
+
+            state.filteredData.length;
+
+    }
+
+    if ($("monthlyAverage")) {
+
+        $("monthlyAverage").textContent =
+
+            `${round(avg)} min`;
+
+    }
+
+    if ($("monthlyBest")) {
+
+        $("monthlyBest").textContent =
+
+            `${round(best)} min`;
+
+    }
+
+    if ($("monthlyWorst")) {
+
+        $("monthlyWorst").textContent =
+
+            `${round(worst)} min`;
+
+    }
+
+    if ($("timeSavedMonth")) {
+
+        const saved =
+
+            Math.round(
+
+                (worst - avg) *
+
+                state.filteredData.length
+
+            );
+
+        $("timeSavedMonth").textContent =
+
+            `${saved} min`;
+
+    }
+
+    if ($("overallScore")) {
+
+        const score =
+
+            Math.max(
+
+                1,
+
+                Math.round(
+
+                    100 - avg
+
+                )
+
+            );
+
+        $("overallScore").textContent =
+
+            `${score}/100`;
+
+    }
+
+}
+
+console.log(
+
+    "✓ Script Part 7 Loaded"
+
+);
+
+/* ============================================================
+   PART 8
+   HISTORY • CALCULATOR • ROUTES • INSIGHTS
+============================================================ */
+
+/* ============================================================
+   HISTORY CHART
+============================================================ */
+
+function renderHistoryChart() {
 
     const canvas = $("historyChart");
 
@@ -1374,17 +1663,17 @@ function updateHistoryChart() {
 
                         data: values,
 
-                        borderColor: "#2dd4bf",
+                        borderColor: "#38bdf8",
 
                         backgroundColor:
 
-                            "rgba(45,212,191,.12)",
+                            "rgba(56,189,248,.15)",
 
                         borderWidth: 3,
 
-                        fill: true,
-
                         tension: .35,
+
+                        fill: true,
 
                         pointRadius: 4
 
@@ -1418,111 +1707,55 @@ function updateHistoryChart() {
 
 }
 
-/* ==========================================================
-   Leave By Calculator
-========================================================== */
 
-function calculateDeparture() {
+/* ============================================================
+   LEAVE BY CALCULATOR
+============================================================ */
+
+function calculateDepartureTime() {
 
     const input = $("arrivalInput");
 
     if (!input) return;
 
-    const value = input.value;
+    if (!state.recommendation) return;
 
-    if (!value) return;
+    const parts = input.value.split(":");
 
-    const parts = value.split(":");
+    const hour = Number(parts[0]);
 
-    const arrivalHour = Number(parts[0]);
-
-    const arrivalMinute = Number(parts[1]);
-
-    const rec = calculateRecommendation();
-
-    if (!rec) return;
-
-    const departure = subtractMinutes(
-
-        arrivalHour,
-
-        arrivalMinute,
-
-        rec.eta
-
-    );
+    const minute = Number(parts[1]);
 
     $("recommendedDeparture").textContent =
 
-        departure;
+        subtractMinutes(
+
+            hour,
+
+            minute,
+
+            state.recommendation.eta
+
+        );
 
 }
 
-function setupCalculator() {
 
-    const button = $("calculateButton");
-
-    if (!button) return;
-
-    button.addEventListener(
-
-        "click",
-
-        calculateDeparture
-
-    );
-
-}
-
-/* ==========================================================
-   AI Insights
-========================================================== */
-
-function updateAIInsights() {
-
-    if (!state.filteredData.length) return;
-
-    const etas =
-
-        state.filteredData.map(r => r.eta);
-
-    const avg = average(etas);
-
-    const best = Math.min(...etas);
-
-    const worst = Math.max(...etas);
-
-    const save = Math.round(worst - best);
-
-    console.log({
-
-        average: avg,
-
-        best,
-
-        worst,
-
-        possibleSaving: save
-
-    });
-
-}
-
-/* ==========================================================
-   Route Summary
-========================================================== */
+/* ============================================================
+   ROUTE SUMMARY
+============================================================ */
 
 function updateRouteCards() {
 
     if (!state.filteredData.length) return;
 
-    const current = state.filteredData[0];
+    const row = state.filteredData[0];
 
     if ($("routeDuration")) {
 
         $("routeDuration").textContent =
 
-            `${round(current.eta)} min`;
+            `${round(row.eta)} min`;
 
     }
 
@@ -1532,55 +1765,253 @@ function updateRouteCards() {
 
             state.selectedDirection === "A→B"
 
-                ? "Home → Office"
+            ? "Home → Office"
 
-                : "Office → Home";
+            : "Office → Home";
 
     }
 
     if ($("trafficDelay")) {
 
-        $("trafficDelay").textContent =
+        const best =
 
-            `${Math.max(
+            Math.min(
 
-                0,
+                ...state.filteredData.map(
 
-                round(
-
-                    current.eta -
-
-                    Math.min(
-
-                        ...state.filteredData.map(r=>r.eta)
-
-                    )
+                    r => r.eta
 
                 )
 
-            )} min`;
+            );
+
+        $("trafficDelay").textContent =
+
+            `${round(row.eta-best)} min`;
 
     }
 
 }
 
-/* ==========================================================
-   Dashboard Refresh
-========================================================== */
 
-const originalRefresh = refreshDashboard;
+/* ============================================================
+   AI INSIGHTS
+============================================================ */
 
-refreshDashboard = function(){
+function updateAIInsights() {
 
-    if(!state.filteredData.length){
+    if (!state.filteredData.length) return;
+
+    const eta =
+
+        state.filteredData.map(
+
+            r => r.eta
+
+        );
+
+    const avg = average(eta);
+
+    const best = Math.min(...eta);
+
+    const worst = Math.max(...eta);
+
+    console.group(
+
+        "AI Insight"
+
+    );
+
+    console.log(
+
+        "Average ETA:",
+
+        round(avg)
+
+    );
+
+    console.log(
+
+        "Best ETA:",
+
+        round(best)
+
+    );
+
+    console.log(
+
+        "Worst ETA:",
+
+        round(worst)
+
+    );
+
+    console.log(
+
+        "Possible Saving:",
+
+        round(worst-best),
+
+        "mins"
+
+    );
+
+    console.groupEnd();
+
+}
+
+
+/* ============================================================
+   CALCULATOR EVENTS
+============================================================ */
+
+function initializeCalculator() {
+
+    const button = $("calculateButton");
+
+    if (!button) return;
+
+    button.addEventListener(
+
+        "click",
+
+        calculateDepartureTime
+
+    );
+
+}
+
+console.log(
+
+    "✓ Script Part 8 Loaded"
+
+);
+
+/* ============================================================
+   PART 9
+   MAPS • FINAL REFRESH • STARTUP
+============================================================ */
+
+/* ============================================================
+   GOOGLE MAP
+============================================================ */
+
+function initializeMap() {
+
+    if (!window.google) {
+
+        console.warn("Google Maps not loaded.");
 
         return;
 
     }
 
+    const mapElement = $("map");
+
+    if (!mapElement) return;
+
+    state.map = new google.maps.Map(
+
+        mapElement,
+
+        {
+
+            zoom: 13,
+
+            center: {
+
+                lat: 12.9716,
+
+                lng: 77.5946
+
+            },
+
+            mapTypeControl: false,
+
+            streetViewControl: false,
+
+            fullscreenControl: false
+
+        }
+
+    );
+
+}
+
+
+/* ============================================================
+   UPDATE MAP
+============================================================ */
+
+function updateMap() {
+
+    if (!state.map) return;
+
+    console.log(
+
+        "Map refreshed:",
+
+        state.selectedDirection
+
+    );
+
+}
+
+
+/* ============================================================
+   ROUTE LABELS
+============================================================ */
+
+function updateRouteSummary() {
+
+    if (!state.filteredData.length) return;
+
+    const row = state.filteredData[0];
+
+    if ($("routeDuration")) {
+
+        $("routeDuration").textContent =
+
+            `${round(row.eta)} min`;
+
+    }
+
+    if ($("routeName")) {
+
+        $("routeName").textContent =
+
+            state.selectedDirection === "A→B"
+
+            ? "🏠 Home → Office"
+
+            : "🏢 Office → Home";
+
+    }
+
+}
+
+
+/* ============================================================
+   FINAL DASHBOARD REFRESH
+============================================================ */
+
+function refreshDashboard() {
+
+    if (!state.filteredData.length) {
+
+        console.warn("No rows available.");
+
+        return;
+
+    }
+
+    calculateRecommendation();
+
     updateRecommendationCard();
 
-    updateHeroCards();
+    updateTrafficCard();
+
+    updateSummaryCard();
 
     updateDecisionPanel();
 
@@ -1592,32 +2023,54 @@ refreshDashboard = function(){
 
     updateReliability();
 
-    updateMonthlyStats();
+    updateMonthlyScorecard();
 
-    updateHistoryChart();
-
-    updateAIInsights();
+    renderHistoryChart();
 
     updateRouteCards();
 
-};
+    updateRouteSummary();
 
-/* ==========================================================
-   Initialize App
-========================================================== */
+    updateAIInsights();
 
-document.addEventListener(
+    updateMap();
 
-    "DOMContentLoaded",
+}
 
-    ()=>{
 
-        setTodayDate();
+/* ============================================================
+   INITIALIZATION
+============================================================ */
 
-        setupCalculator();
+async function initializeDashboard() {
 
-    }
+    setTodayDate();
+
+    initializeUI();
+
+    initializeCalculator();
+
+    initializeMap();
+
+    await loadData();
+
+}
+
+
+/* ============================================================
+   APPLICATION START
+============================================================ */
+
+window.addEventListener(
+
+    "load",
+
+    initializeDashboard
 
 );
 
-console.log("✓ Part 8 Loaded");
+console.log(
+
+    "✓ Commute Intelligence Ready"
+
+);
