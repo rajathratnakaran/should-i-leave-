@@ -41,6 +41,8 @@ const state = {
 
     selectedDay: "Monday",
 
+    selectedDirection: "A→B",
+
     map: null,
 
     directionsService: null,
