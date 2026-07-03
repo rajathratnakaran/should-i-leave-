@@ -1,37 +1,28 @@
-/* ===========================================================
+/* ==========================================================
    COMMUTE INTELLIGENCE DASHBOARD
-   script.js
-   PART 1
-=========================================================== */
-
-/* ===========================================================
-   CONFIG
-=========================================================== */
+   Part 1
+   Configuration + State + Utilities
+========================================================== */
 
 const CONFIG = {
 
     SHEET_URL:
         "https://script.google.com/macros/s/AKfycbxBpfm1yApsHwDVef9WD2gp0AQBIP8RAAZsDahHKK2qWi9x8co4cSAMD9Ll3_lQxLSKzA/exec",
 
-    HOME: {
+    MAPS_API_KEY:
+        "",
 
-        lat: 12.9698,
-        lng: 77.7499
+    DEFAULT_DAY:
+        "Thursday",
 
-    },
-
-    OFFICE: {
-
-        lat: 12.9352,
-        lng: 77.6954
-
-    }
+    DEFAULT_DIRECTION:
+        "A→B"
 
 };
 
-/* ===========================================================
-   APPLICATION STATE
-=========================================================== */
+/* ==========================================================
+   Global State
+========================================================== */
 
 const state = {
 
@@ -39,9 +30,11 @@ const state = {
 
     filteredData: [],
 
-    selectedDay: "Monday",
+    selectedDay:
+        CONFIG.DEFAULT_DAY,
 
-    selectedDirection: "A→B",
+    selectedDirection:
+        CONFIG.DEFAULT_DIRECTION,
 
     map: null,
 
@@ -49,62 +42,167 @@ const state = {
 
     directionsRenderer: null,
 
-    charts: {}
+    charts: {
+
+        traffic: null,
+
+        weekly: null,
+
+        history: null
+
+    }
 
 };
 
-/* ===========================================================
-   DOM HELPERS
-=========================================================== */
+/* ==========================================================
+   DOM Helpers
+========================================================== */
 
-const $ = id => document.getElementById(id);
+function $(id) {
 
-const dom = {
-
-    todayDate: $("todayDate"),
-
-    trafficChart: $("trafficChart"),
-
-    weeklyTrendChart: $("weeklyTrendChart"),
-
-    historyChart: $("historyChart"),
-
-    heatmap: $("heatmap"),
-
-    map: $("map")
-
-};
-
-/* ===========================================================
-   INITIALIZE
-=========================================================== */
-
-document.addEventListener("DOMContentLoaded", init);
-
-async function init() {
-
-    updateToday();
-
-    bindWeekdayButtons();
-
-    initializeMap();
-
-    await loadData();
-
-    renderDashboard();
+    return document.getElementById(id);
 
 }
 
-/* ===========================================================
-   TODAY DATE
-=========================================================== */
+function $all(selector) {
 
-function updateToday() {
+    return [...document.querySelectorAll(selector)];
 
-    const today = new Date();
+}
 
-    dom.todayDate.textContent =
-        today.toLocaleDateString("en-IN", {
+/* ==========================================================
+   Number Helpers
+========================================================== */
+
+function round(value, decimals = 1) {
+
+    return Number(value.toFixed(decimals));
+
+}
+
+function average(values) {
+
+    if (!values.length) return 0;
+
+    return values.reduce((a, b) => a + b, 0) / values.length;
+
+}
+
+function sum(values) {
+
+    return values.reduce((a, b) => a + b, 0);
+
+}
+
+function median(values) {
+
+    if (!values.length) return 0;
+
+    const sorted = [...values].sort((a, b) => a - b);
+
+    const middle = Math.floor(sorted.length / 2);
+
+    if (sorted.length % 2 === 0) {
+
+        return (sorted[middle - 1] + sorted[middle]) / 2;
+
+    }
+
+    return sorted[middle];
+
+}
+
+function percentile(values, p) {
+
+    if (!values.length) return 0;
+
+    const sorted = [...values].sort((a, b) => a - b);
+
+    const index = Math.ceil((p / 100) * sorted.length) - 1;
+
+    return sorted[Math.max(index, 0)];
+
+}
+
+function standardDeviation(values) {
+
+    if (!values.length) return 0;
+
+    const avg = average(values);
+
+    const variance = average(
+
+        values.map(v => Math.pow(v - avg, 2))
+
+    );
+
+    return Math.sqrt(variance);
+
+}
+
+/* ==========================================================
+   Time Helpers
+========================================================== */
+
+function to12Hour(hour) {
+
+    if (hour === 0) return 12;
+
+    if (hour > 12) return hour - 12;
+
+    return hour;
+
+}
+
+function formatTime(hour, minute) {
+
+    const ampm = hour >= 12 ? "PM" : "AM";
+
+    return `${to12Hour(hour)}:${String(minute).padStart(2, "0")} ${ampm}`;
+
+}
+
+function addMinutes(hour, minute, minsToAdd) {
+
+    const total = hour * 60 + minute + Math.round(minsToAdd);
+
+    const h = Math.floor(total / 60) % 24;
+
+    const m = total % 60;
+
+    return formatTime(h, m);
+
+}
+
+function subtractMinutes(hour, minute, minsToSubtract) {
+
+    const total = hour * 60 + minute - Math.round(minsToSubtract);
+
+    const h = ((Math.floor(total / 60) % 24) + 24) % 24;
+
+    const m = ((total % 60) + 60) % 60;
+
+    return formatTime(h, m);
+
+}
+
+function minuteKey(hour, minute) {
+
+    return `${hour}:${String(minute).padStart(2, "0")}`;
+
+}
+
+/* ==========================================================
+   Date Helpers
+========================================================== */
+
+function getTodayString() {
+
+    return new Date().toLocaleDateString(
+
+        "en-IN",
+
+        {
 
             weekday: "long",
 
@@ -112,729 +210,236 @@ function updateToday() {
 
             month: "long"
 
-        });
+        }
+
+    );
 
 }
 
-/* ===========================================================
-   WEEKDAY BUTTONS
-=========================================================== */
+function normalizeWeekday(day) {
 
-function bindWeekdayButtons() {
-
-    document
-        .querySelectorAll(".weekday")
-        .forEach(button => {
-
-            button.addEventListener("click", () => {
-
-                document
-                    .querySelectorAll(".weekday")
-                    .forEach(b => b.classList.remove("active"));
-
-                button.classList.add("active");
-
-                state.selectedDay =
-                    button.dataset.day;
-
-                filterWeekday();
-
-                renderDashboard();
-
-            });
-
-        });
+    return day.substring(0, 3).toLowerCase();
 
 }
 
-/* ===========================================================
-   LOAD DATA
-=========================================================== */
+/* ==========================================================
+   Dashboard Helper
+========================================================== */
+
+function setTodayDate() {
+
+    $("todayDate").textContent = getTodayString();
+
+}
+
+console.log("✓ Part 1 Loaded");
+
+/* ==========================================================
+   Part 2
+   Load Google Sheet Data
+========================================================== */
 
 async function loadData() {
 
     try {
 
-        const response =
-            await fetch(CONFIG.SHEET_URL);
+        console.log("Loading commute data...");
 
-        const json =
-            await response.json();
+        const response = await fetch(CONFIG.SHEET_URL);
 
-        state.rawData = json;
-state.rawData = json.map(row => ({
+        if (!response.ok) {
 
-    timestamp: row.Timestamp,
-
-    weekday: row.Weekday,
-
-    direction: row.Direction,
-
-    eta: Number(row.ETA_Min),
-
-    distance: Number(row.Distance_KM),
-
-    hour: Number(row.Hour),
-
-    min: Number(row.Minute),
-
-    date: row.Date
-
-}));
-        console.log(
-            "Loaded rows:",
-            state.rawData.length
-        );
-
-        filterWeekday();
-
-    }
-
-    catch (error) {
-
-        console.error(error);
-
-        alert("Unable to load Google Sheet.");
-
-    }
-
-}
-
-/* ===========================================================
-   FILTER WEEKDAY
-=========================================================== */
-
-function filterWeekday() {
-
-    const map = {
-
-        Monday: "Mon",
-        Wednesday: "Wed",
-        Thursday: "Thu"
-
-    };
-
-    const sheetDay = map[state.selectedDay];
-
-    state.filteredData = state.rawData.filter(
-        row => row.weekday === sheetDay
-    );
-
-    console.log("Selected Day:", state.selectedDay);
-    console.log("Sheet Day:", sheetDay);
-    console.log("Rows:", state.filteredData.length);
-
-    if (state.filteredData.length) {
-        console.log(state.filteredData[0]);
-    }
-
-}
-
-/* ===========================================================
-   GOOGLE MAP
-=========================================================== */
-
-function initializeMap() {
-
-    state.map = new google.maps.Map(
-
-        dom.map,
-
-        {
-
-            zoom: 12,
-
-            center: CONFIG.HOME,
-
-            disableDefaultUI: true,
-
-            styles: mapStyle
+            throw new Error(
+                `HTTP ${response.status}`
+            );
 
         }
 
-    );
+        const json = await response.json();
 
-    state.directionsService =
-        new google.maps.DirectionsService();
+        console.log(
+            "Rows received:",
+            json.length
+        );
 
-    state.directionsRenderer =
-        new google.maps.DirectionsRenderer({
+       state.rawData = json.map(...);
 
-            map: state.map,
+filterData();
 
-            suppressMarkers: false
+initializeUI();
 
-        });
+refreshDashboard();
 
 }
 
-/* ===========================================================
-   MAIN RENDER
-=========================================================== */
+    catch(err){
 
-function renderDashboard() {
+        console.error(
+            "Unable to load data",
+            err
+        );
+
+    }
+
+}
+
+/* ==========================================================
+   Filter Dataset
+========================================================== */
+
+function filterData(){
+
+    const dayMap={
+
+        Monday:"Mon",
+
+        Tuesday:"Tue",
+
+        Wednesday:"Wed",
+
+        Thursday:"Thu",
+
+        Friday:"Fri",
+
+        Saturday:"Sat",
+
+        Sunday:"Sun"
+
+    };
+
+    const shortDay=
+        dayMap[state.selectedDay];
+
+    state.filteredData=
+        state.rawData.filter(row=>
+
+            row.weekday===shortDay &&
+
+            row.direction===state.selectedDirection &&
+
+            row.status==="SUCCESS"
+
+        );
+
+    state.filteredData.sort((a,b)=>{
+
+        return (
+
+            a.hour*60+a.minute
+
+        )-
+
+        (
+
+            b.hour*60+b.minute
+
+        );
+
+    });
+
+    console.log(
+        "Selected Day:",
+        state.selectedDay
+    );
+
+    console.log(
+        "Direction:",
+        state.selectedDirection
+    );
+
+    console.log(
+        "Filtered Rows:",
+        state.filteredData.length
+    );
+
+    if(state.filteredData.length){
+
+        console.log(
+            state.filteredData[0]
+        );
+
+    }
+
+}
+
+/* ==========================================================
+   Dashboard Refresh
+========================================================== */
+
+function refreshDashboard(){
+
+    if(!state.filteredData.length){
+
+        console.warn("No data");
+
+        return;
+
+    }
+
+    updateRecommendationCard();
 
     updateHeroCards();
 
-    drawTrafficChart();
+    updateDecisionPanel();
 
-    drawWeeklyTrend();
+    renderTrafficChart();
 
-    drawHeatmap();
+    renderWeeklyTrend();
 
-    updateMetrics();
+    renderHeatmap();
 
-    updateScorecard();
+    updateReliability();
 
-}
-
-/* ===========================================================
-   HERO CARDS
-=========================================================== */
-
-function updateHeroCards() {
-
-    if (!state.filteredData.length)
-        return;
-
-    const eta =
-        state.filteredData.map(r => Number(r.eta));
-
-    const min =
-        Math.min(...eta);
-
-    const max =
-        Math.max(...eta);
-
-    const avg =
-        average(eta);
-
-    $("currentETA").textContent =
-        formatMinutes(avg);
-
-    $("bestETA").textContent =
-        formatMinutes(min);
-
-    $("worstETA").textContent =
-        formatMinutes(max);
-
-    $("variation").textContent =
-        formatMinutes(max - min);
+    updateMonthlyStats();
 
 }
 
-/* ===========================================================
-   HELPER FUNCTIONS
-=========================================================== */
+/* ==========================================================
+   Start App
+========================================================== */
 
-function average(values) {
+document.addEventListener(
 
-    if (!values.length)
-        return 0;
+    "DOMContentLoaded",
 
-    return values.reduce(
+    ()=>{
 
-        (sum, value) => sum + value,
+        setTodayDate();
 
-        0
-
-    ) / values.length;
-
-}
-
-function median(values) {
-
-    if (!values.length)
-        return 0;
-
-    const sorted =
-        [...values].sort((a, b) => a - b);
-
-    const middle =
-        Math.floor(sorted.length / 2);
-
-    return sorted.length % 2
-
-        ? sorted[middle]
-
-        : (sorted[middle - 1] + sorted[middle]) / 2;
-
-}
-
-function formatMinutes(value) {
-
-    return Number(value).toFixed(1) + " min";
-
-}
-
-function groupBy(array, property) {
-
-    return array.reduce((groups, item) => {
-
-        if (!groups[item[property]]) {
-
-            groups[item[property]] = [];
-
-        }
-
-        groups[item[property]].push(item);
-
-        return groups;
-
-    }, {});
-
-}
-
-/* ===========================================================
-   GOOGLE MAP STYLE
-=========================================================== */
-
-const mapStyle = [
-
-    {
-
-        elementType: "geometry",
-
-        stylers: [
-
-            { color: "#0f1418" }
-
-        ]
-
-    },
-
-    {
-
-        elementType: "labels.text.fill",
-
-        stylers: [
-
-            { color: "#d8e1e8" }
-
-        ]
-
-    },
-
-    {
-
-        elementType: "labels.text.stroke",
-
-        stylers: [
-
-            { color: "#0f1418" }
-
-        ]
-
-    },
-
-    {
-
-        featureType: "road",
-
-        elementType: "geometry",
-
-        stylers: [
-
-            { color: "#27313a" }
-
-        ]
-
-    },
-
-    {
-
-        featureType: "water",
-
-        elementType: "geometry",
-
-        stylers: [
-
-            { color: "#0b2436" }
-
-        ]
+        loadData();
 
     }
 
-];
+);
 
-/* ===========================================================
-   PART 2 STARTS BELOW
-=========================================================== */
+console.log("✓ Part 2 Loaded");
 
-/*
-Next Part Includes
+/* ==========================================================
+   Part 3
+   UI Events
+========================================================== */
 
-✓ drawTrafficChart()
+function setupWeekdayButtons() {
 
-✓ drawWeeklyTrend()
+    const buttons =
+        $all(".weekday");
 
-✓ drawHistoryChart()
+    buttons.forEach(button => {
 
-✓ drawHeatmap()
+        button.addEventListener("click", () => {
 
-✓ Recommendation Engine
+            buttons.forEach(btn =>
+                btn.classList.remove("active")
+            );
 
-✓ Google Directions API
+            button.classList.add("active");
 
-✓ Leave-by Calculator
+            state.selectedDay =
+                button.dataset.day;
 
-✓ Monthly Scorecard
+            filterData();
 
-✓ Route Comparison
-
-*/
-
-/* ===========================================================
-   PART 2A
-   CHARTS
-=========================================================== */
-
-function destroyChart(name) {
-
-    if (state.charts[name]) {
-
-        state.charts[name].destroy();
-
-    }
-
-}
-
-function chartDefaults() {
-
-    return {
-
-        responsive: true,
-
-        maintainAspectRatio: false,
-
-        plugins: {
-
-            legend: {
-
-                labels: {
-
-                    color: "#dce3ea",
-
-                    font: {
-
-                        family: "IBM Plex Mono"
-
-                    }
-
-                }
-
-            }
-
-        },
-
-        scales: {
-
-            x: {
-
-                ticks: {
-
-                    color: "#9aa7b2"
-
-                },
-
-                grid: {
-
-                    color: "rgba(255,255,255,.05)"
-
-                }
-
-            },
-
-            y: {
-
-                ticks: {
-
-                    color: "#9aa7b2"
-
-                },
-
-                grid: {
-
-                    color: "rgba(255,255,255,.05)"
-
-                }
-
-            }
-
-        }
-
-    };
-
-}
-
-/* ===========================================================
-   TRAFFIC CURVE
-=========================================================== */
-
-function drawTrafficChart() {
-
-    destroyChart("traffic");
-
-    if (!state.filteredData.length) return;
-
-    const labels = state.filteredData.map(row => {
-
-        return `${Number(row.Hour)}:${String(Number(row.Minute)).padStart(2, "0")}`;
-
-    });
-
-    const eta = state.filteredData.map(row => Number(Number(row.ETA_Min)));
-
-    state.charts.traffic = new Chart(
-
-        $("trafficChart"),
-
-        {
-
-            type: "line",
-
-            data: {
-
-                labels,
-
-                datasets: [
-
-                    {
-
-                        label: "ETA",
-
-                        data: eta,
-
-                        borderColor: "#2dd4bf",
-
-                        backgroundColor: "rgba(45,212,191,.18)",
-
-                        borderWidth: 3,
-
-                        fill: true,
-
-                        pointRadius: 0,
-
-                        tension: .35
-
-                    }
-
-                ]
-
-            },
-
-            options: chartDefaults()
-
-        }
-
-    );
-
-}
-
-/* ===========================================================
-   WEEKLY TREND
-=========================================================== */
-
-function drawWeeklyTrend() {
-
-    destroyChart("weekly");
-
-    const grouped = groupBy(
-
-        state.filteredData,
-
-        "date"
-
-    );
-
-    const labels = [];
-
-    const averages = [];
-
-    Object.keys(grouped).forEach(date => {
-
-        labels.push(date);
-
-        averages.push(
-
-            average(
-
-                grouped[date].map(
-
-                    r => Number(r.eta)
-
-                )
-
-            )
-
-        );
-
-    });
-
-    state.charts.weekly = new Chart(
-
-        $("weeklyTrendChart"),
-
-        {
-
-            type: "bar",
-
-            data: {
-
-                labels,
-
-                datasets: [
-
-                    {
-
-                        label: "Average ETA",
-
-                        data: averages,
-
-                        backgroundColor: "#4f8cff"
-
-                    }
-
-                ]
-
-            },
-
-            options: chartDefaults()
-
-        }
-
-    );
-
-}
-
-/* ===========================================================
-   HISTORY
-=========================================================== */
-
-function drawHistoryChart() {
-
-    destroyChart("history");
-
-    const grouped = groupBy(
-
-        state.filteredData,
-
-        "date"
-
-    );
-
-    const labels = Object.keys(grouped);
-
-    const mins = [];
-
-    const maxs = [];
-
-    labels.forEach(date => {
-
-        const values = grouped[date]
-
-            .map(r => Number(r.eta));
-
-        mins.push(Math.min(...values));
-
-        maxs.push(Math.max(...values));
-
-    });
-
-    state.charts.history = new Chart(
-
-        $("historyChart"),
-
-        {
-
-            type: "line",
-
-            data: {
-
-                labels,
-
-                datasets: [
-
-                    {
-
-                        label: "Best",
-
-                        data: mins,
-
-                        borderColor: "#22c55e",
-
-                        fill: false,
-
-                        tension: .3
-
-                    },
-
-                    {
-
-                        label: "Worst",
-
-                        data: maxs,
-
-                        borderColor: "#ff6b6b",
-
-                        fill: false,
-
-                        tension: .3
-
-                    }
-
-                ]
-
-            },
-
-            options: chartDefaults()
-
-        }
-
-    );
-
-}
-/* ===========================================================
-   PART 2B
-   HEATMAP + RECOMMENDATION ENGINE
-=========================================================== */
-
-function drawHeatmap() {
-
-    const container = $("heatmap");
-
-    if (!container) return;
-
-    container.innerHTML = "";
-
-    if (!state.filteredData.length) return;
-
-    const grouped = groupBy(state.filteredData, "date");
-
-    Object.keys(grouped).forEach(date => {
-
-        grouped[date].forEach(row => {
-
-            const cell = document.createElement("div");
-
-            cell.className = "heatmap-cell";
-
-            const eta = Number(Number(row.ETA_Min));
-
-            if (eta <= 30) cell.classList.add("level-1");
-            else if (eta <= 35) cell.classList.add("level-2");
-            else if (eta <= 40) cell.classList.add("level-3");
-            else if (eta <= 45) cell.classList.add("level-4");
-            else if (eta <= 50) cell.classList.add("level-5");
-            else if (eta <= 55) cell.classList.add("level-6");
-            else cell.classList.add("level-7");
-
-            cell.title =
-                `${date}
-${Number(row.Hour)}:${String(Number(row.Minute)).padStart(2,"0")}
-ETA ${eta.toFixed(1)} min`;
-
-            container.appendChild(cell);
+            refreshDashboard();
 
         });
 
@@ -842,20 +447,97 @@ ETA ${eta.toFixed(1)} min`;
 
 }
 
-/* ===========================================================
-   BEST DEPARTURE WINDOW
-=========================================================== */
+function setupDirectionButtons() {
+
+    const buttons =
+        $all(".direction");
+
+    buttons.forEach(button => {
+
+        button.addEventListener("click", () => {
+
+            buttons.forEach(btn =>
+                btn.classList.remove("active")
+            );
+
+            button.classList.add("active");
+
+            state.selectedDirection =
+                button.dataset.direction;
+
+            filterData();
+
+            refreshDashboard();
+
+        });
+
+    });
+
+}
+
+/* ==========================================================
+   Initialize UI
+========================================================== */
+
+function initializeUI() {
+
+    setupWeekdayButtons();
+
+    setupDirectionButtons();
+
+}
+
+/* ==========================================================
+   Update loadData()
+========================================================== */
+
+/*
+Inside loadData()
+
+Replace
+
+    filterData();
+
+with
+
+    filterData();
+
+    initializeUI();
+
+    refreshDashboard();
+
+*/
+
+/* ==========================================================
+   Console
+========================================================== */
+
+console.log("✓ Part 3 Loaded");
+
+/* ==========================================================
+   Part 4
+   Recommendation Engine
+========================================================== */
 
 function calculateRecommendation() {
 
-    if (!state.filteredData.length) return null;
+    if (!state.filteredData.length) {
+
+        return null;
+
+    }
 
     const minuteGroups = {};
 
     state.filteredData.forEach(row => {
 
-        const key =
-            `${row.hour}:${String(row.min).padStart(2,"0")}`;
+        const key = minuteKey(
+
+            row.hour,
+
+            row.minute
+
+        );
 
         if (!minuteGroups[key]) {
 
@@ -868,45 +550,84 @@ function calculateRecommendation() {
     });
 
     let bestMinute = null;
+
     let bestAverage = Infinity;
 
     Object.entries(minuteGroups).forEach(([minute, values]) => {
 
         const avg = average(values);
 
-        if (!Number.isNaN(avg) && avg < bestAverage) {
+        if (avg < bestAverage) {
 
             bestAverage = avg;
+
             bestMinute = minute;
 
         }
 
     });
 
-    console.log({
-        bestMinute,
-        bestAverage
-    });
-
     return {
 
         minute: bestMinute,
-        eta: bestAverage
+
+        eta: round(bestAverage),
+
+        confidence: Math.min(
+
+            99,
+
+            Math.round(
+
+                100 -
+
+                (
+
+                    standardDeviation(
+
+                        state.filteredData.map(r => r.eta)
+
+                    ) * 4
+
+                )
+
+            )
+
+        )
 
     };
 
 }
-/* ===========================================================
-   HERO RECOMMENDATION
-=========================================================== */
+
+/* ==========================================================
+   Best Window
+========================================================== */
+
+function buildWindow(minuteString) {
+
+    const parts = minuteString.split(":");
+
+    const h = Number(parts[0]);
+
+    const m = Number(parts[1]);
+
+    const start = formatTime(h, Math.max(0, m - 1));
+
+    const end = formatTime(h, Math.min(59, m + 2));
+
+    return `${start} – ${end}`;
+
+}
+
+/* ==========================================================
+   Hero Card
+========================================================== */
 
 function updateRecommendationCard() {
 
     const rec = calculateRecommendation();
 
-    if (!rec || !rec.minute) {
-
-        console.warn("No recommendation available");
+    if (!rec) {
 
         return;
 
@@ -918,478 +639,985 @@ function updateRecommendationCard() {
 
     const minute = Number(parts[1]);
 
-    const ampm = hour >= 12 ? "PM" : "AM";
-
-    const displayHour =
-        hour > 12 ? hour - 12 : hour;
-
     $("leaveHour").textContent =
-        `${String(displayHour).padStart(2,"0")}:${String(minute).padStart(2,"0")}`;
+
+        `${to12Hour(hour)}:${String(minute).padStart(2, "0")}`;
 
     document.querySelector(".ampm").textContent =
-        ampm;
+
+        hour >= 12 ? "PM" : "AM";
 
     $("expectedETA").textContent =
-        `${rec.eta.toFixed(1)} mins`;
+
+        `${rec.eta} mins`;
 
     $("arrivalTime").textContent =
-        addMinutes(hour, minute, rec.eta);
+
+        addMinutes(
+
+            hour,
+
+            minute,
+
+            rec.eta
+
+        );
+
+    $("confidence").textContent =
+
+        `${rec.confidence}%`;
 
     $("bestWindow").textContent =
+
         buildWindow(rec.minute);
 
 }
 
-/* ===========================================================
-   ARRIVAL TIME
-=========================================================== */
+/* ==========================================================
+   Current Metrics
+========================================================== */
 
-function addMinutes(hour, minute, eta) {
+function updateHeroCards() {
 
-    const d = new Date();
+    if (!state.filteredData.length) {
 
-    d.setHours(hour);
+        return;
 
-    d.setMinutes(minute);
+    }
 
-    d.setSeconds(0);
+    const etas =
 
-    d.setMinutes(d.getMinutes() + Math.round(eta));
+        state.filteredData.map(r => r.eta);
 
-    return d.toLocaleTimeString(
+    const current =
 
-        "en-IN",
+        state.filteredData[0];
 
-        {
+    $("currentETA").textContent =
 
-            hour: "numeric",
+        `${round(current.eta)} min`;
 
-            minute: "2-digit"
+    $("distance").textContent =
 
-        }
+        `${round(current.distance,2)} km`;
 
-    );
+    const avgSpeed =
 
-}
+        current.distance /
 
-/* ===========================================================
-   BEST WINDOW
-=========================================================== */
+        (current.eta / 60);
 
-function buildWindow(time) {
+    $("avgSpeed").textContent =
 
-    const p = time.split(":");
+        `${round(avgSpeed)} km/h`;
 
-    const hour = Number(p[0]);
+    $("bestETA").textContent =
 
-    const minute = Number(p[1]);
+        `${round(Math.min(...etas))} min`;
 
-    const start =
-        new Date(0,0,0,hour,minute-2);
+    $("worstETA").textContent =
 
-    const end =
-        new Date(0,0,0,hour,minute+2);
+        `${round(Math.max(...etas))} min`;
 
-    const format = d =>
-        d.toLocaleTimeString(
+    $("variation").textContent =
 
-            "en-IN",
+        `${round(
 
-            {
+            Math.max(...etas) -
 
-                hour:"2-digit",
+            Math.min(...etas)
 
-                minute:"2-digit"
-
-            }
-
-        );
-
-    return `${format(start)} - ${format(end)}`;
+        )} min";
 
 }
 
-/* ===========================================================
-   METRICS
-=========================================================== */
+/* ==========================================================
+   Decision Panel
+========================================================== */
 
-function updateMetrics() {
+function updateDecisionPanel() {
 
-    if (!state.filteredData.length) return;
+    const rec = calculateRecommendation();
 
-    const eta =
-        state.filteredData.map(r => Number(r.eta));
+    if (!rec) return;
 
-    $("avgEtaMetric").textContent =
-        formatMinutes(average(eta));
+    $("decisionWindow").textContent =
 
-    $("medianEtaMetric").textContent =
-        formatMinutes(median(eta));
+        buildWindow(rec.minute);
 
-    $("p95Metric").textContent =
-        formatMinutes(percentile(eta,95));
+    const under40 =
 
-    $("stdMetric").textContent =
-        standardDeviation(eta).toFixed(2);
+        state.filteredData.filter(
 
-    $("confidenceMetric").textContent =
-        confidenceScore(eta) + "%";
+            r => r.eta <= 40
 
-    updateRecommendationCard();
+        ).length;
 
-}
+    $("probability").textContent =
 
-/* ===========================================================
-   PERCENTILE
-=========================================================== */
+        `${Math.round(
 
-function percentile(values,p){
+            under40 /
 
-    const sorted =
-        [...values].sort((a,b)=>a-b);
+            state.filteredData.length *
 
-    const index =
-        Math.ceil((p/100)*sorted.length)-1;
+            100
 
-    return sorted[index];
+        )}%`;
 
-}
+    const current =
 
-/* ===========================================================
-   STANDARD DEVIATION
-=========================================================== */
+        state.filteredData[0].eta;
 
-function standardDeviation(values){
+    $("timeSaved").textContent =
 
-    const avg =
-        average(values);
+        `${Math.max(
 
-    const variance =
-        average(
+            0,
 
-            values.map(
+            Math.round(current - rec.eta)
 
-                x => Math.pow(x-avg,2)
+        )} min`;
+
+    $("commuteScore").textContent =
+
+        `${Math.round(
+
+            100 -
+
+            average(
+
+                state.filteredData.map(r=>r.eta)
 
             )
 
-        );
-
-    return Math.sqrt(variance);
+        )}/100`;
 
 }
 
-/* ===========================================================
-   CONFIDENCE SCORE
-=========================================================== */
+console.log("✓ Part 4 Loaded");
 
-function confidenceScore(values){
+/* ==========================================================
+   Part 5
+   Traffic Curve Chart
+========================================================== */
 
-    const sd =
-        standardDeviation(values);
+function renderTrafficChart() {
 
-    let score =
-        100-(sd*5);
+    if (!state.filteredData.length) {
 
-    score =
-        Math.max(40,score);
+        return;
 
-    score =
-        Math.min(99,score);
+    }
 
-    return Math.round(score);
+    const labels = state.filteredData.map(row =>
 
-}
-
-/* ===========================================================
-   PART 2C
-   GOOGLE MAPS + LEAVE BY CALCULATOR + SCORECARD
-=========================================================== */
-
-/* ===========================================================
-   ROUTE
-=========================================================== */
-
-async function loadRoute() {
-
-    if (!state.directionsService) return;
-
-    const request = {
-
-        origin: CONFIG.HOME,
-
-        destination: CONFIG.OFFICE,
-
-        travelMode: google.maps.TravelMode.DRIVING,
-
-        drivingOptions: {
-
-            departureTime: new Date(),
-
-            trafficModel: "bestguess"
-
-        }
-
-    };
-
-    state.directionsService.route(
-
-        request,
-
-        (result, status) => {
-
-            if (status !== "OK") return;
-
-            state.directionsRenderer.setDirections(result);
-
-            const leg = result.routes[0].legs[0];
-
-            $("routeName").textContent =
-                result.routes[0].summary || "Primary Route";
-
-            $("routeDuration").textContent =
-                leg.duration_in_traffic
-                    ? leg.duration_in_traffic.text
-                    : leg.duration.text;
-
-            const normal =
-                leg.duration.value / 60;
-
-            const traffic =
-                leg.duration_in_traffic
-                    ? leg.duration_in_traffic.value / 60
-                    : normal;
-
-            $("trafficDelay").textContent =
-                `${Math.round(traffic - normal)} min`;
-
-            updateRouteCards(result);
-
-        }
+        `${row.hour}:${String(row.minute).padStart(2,"0")}`
 
     );
 
-}
+    const values = state.filteredData.map(row => row.eta);
 
-/* ===========================================================
-   ROUTE CARDS
-=========================================================== */
+    const ctx = $("trafficChart").getContext("2d");
 
-function updateRouteCards(result) {
+    if (state.charts.traffic) {
 
-    const routes = result.routes;
+        state.charts.traffic.destroy();
 
-    ["A", "B", "C"].forEach((letter, index) => {
+    }
 
-        if (!routes[index]) return;
+    state.charts.traffic = new Chart(ctx, {
 
-        const leg = routes[index].legs[0];
+        type: "line",
 
-        const duration =
+        data: {
 
-            leg.duration_in_traffic
-                ? leg.duration_in_traffic.text
-                : leg.duration.text;
+            labels,
 
-        $(`route${letter}Name`).textContent =
-            routes[index].summary || `Route ${letter}`;
+            datasets: [
 
-        $(`route${letter}ETA`).textContent =
-            duration;
+                {
+
+                    label: "ETA (mins)",
+
+                    data: values,
+
+                    borderColor: "#2dd4bf",
+
+                    backgroundColor: "rgba(45,212,191,.15)",
+
+                    borderWidth: 3,
+
+                    pointRadius: 0,
+
+                    pointHoverRadius: 5,
+
+                    tension: .35,
+
+                    fill: true
+
+                }
+
+            ]
+
+        },
+
+        options: {
+
+            responsive: true,
+
+            maintainAspectRatio: false,
+
+            interaction: {
+
+                intersect: false,
+
+                mode: "index"
+
+            },
+
+            plugins: {
+
+                legend: {
+
+                    display: false
+
+                }
+
+            },
+
+            scales: {
+
+                x: {
+
+                    ticks: {
+
+                        color: "#94a3b8",
+
+                        maxTicksLimit: 12
+
+                    },
+
+                    grid: {
+
+                        color: "rgba(255,255,255,.05)"
+
+                    }
+
+                },
+
+                y: {
+
+                    beginAtZero: false,
+
+                    ticks: {
+
+                        color: "#94a3b8"
+
+                    },
+
+                    grid: {
+
+                        color: "rgba(255,255,255,.05)"
+
+                    }
+
+                }
+
+            }
+
+        }
 
     });
 
 }
 
-/* ===========================================================
-   LEAVE BY CALCULATOR
-=========================================================== */
+/* ==========================================================
+   Weekly Trend
+========================================================== */
 
-const calculateButton =
-    $("calculateButton");
+function renderWeeklyTrend() {
 
-if (calculateButton) {
+    const weekdays = [
 
-    calculateButton.addEventListener(
+        "Mon",
 
-        "click",
+        "Wed",
 
-        calculateLeaveTime
+        "Thu"
 
-    );
+    ];
 
-}
+    const averages = weekdays.map(day => {
 
-function calculateLeaveTime() {
+        const rows = state.rawData.filter(r =>
 
-    const input =
-        $("arrivalInput").value;
+            r.weekday === day &&
 
-    if (!input) return;
+            r.direction === state.selectedDirection
 
-    const parts =
-        input.split(":");
+        );
 
-    const hour =
-        Number(parts[0]);
+        if (!rows.length) return 0;
 
-    const minute =
-        Number(parts[1]);
+        return average(
 
-    const recommendation =
-        calculateRecommendation();
+            rows.map(r => r.eta)
 
-    if (!recommendation) return;
+        );
 
-    const eta =
-        Math.round(recommendation.eta);
+    });
 
-    const arrival =
-        new Date();
+    const ctx = $("weeklyTrendChart").getContext("2d");
 
-    arrival.setHours(hour);
+    if (state.charts.weekly) {
 
-    arrival.setMinutes(minute);
+        state.charts.weekly.destroy();
 
-    arrival.setSeconds(0);
+    }
 
-    arrival.setMinutes(
+    state.charts.weekly = new Chart(ctx, {
 
-        arrival.getMinutes() - eta
+        type: "bar",
 
-    );
+        data: {
 
-    $("recommendedDeparture").textContent =
-        arrival.toLocaleTimeString(
+            labels: [
 
-            "en-IN",
+                "Monday",
 
-            {
+                "Wednesday",
 
-                hour: "numeric",
+                "Thursday"
 
-                minute: "2-digit"
+            ],
+
+            datasets: [
+
+                {
+
+                    data: averages,
+
+                    backgroundColor: [
+
+                        "#2dd4bf",
+
+                        "#60a5fa",
+
+                        "#f59e0b"
+
+                    ]
+
+                }
+
+            ]
+
+        },
+
+        options: {
+
+            responsive: true,
+
+            maintainAspectRatio: false,
+
+            plugins: {
+
+                legend: {
+
+                    display: false
+
+                }
+
+            },
+
+            scales: {
+
+                y: {
+
+                    ticks: {
+
+                        color:"#94a3b8"
+
+                    },
+
+                    grid:{
+
+                        color:"rgba(255,255,255,.05)"
+
+                    }
+
+                },
+
+                x:{
+
+                    ticks:{
+
+                        color:"#94a3b8"
+
+                    },
+
+                    grid:{
+
+                        display:false
+
+                    }
+
+                }
 
             }
 
-        );
+        }
+
+    });
 
 }
 
-/* ===========================================================
-   SCORECARD
-=========================================================== */
+console.log("✓ Part 5 Loaded");
 
-function updateScorecard() {
+/* ==========================================================
+   Part 6
+   Traffic Heatmap
+========================================================== */
 
-    if (!state.filteredData.length) return;
+function renderHeatmap() {
 
-    const eta =
-        state.filteredData.map(
+    const container = $("heatmap");
 
-            r => Number(r.eta)
+    if (!container) return;
 
-        );
+    container.innerHTML = "";
 
-    const avg =
-        average(eta);
+    if (!state.filteredData.length) {
 
-    const best =
-        Math.min(...eta);
+        container.innerHTML =
+            "<div class='heatmap-empty'>No data available</div>";
 
-    const worst =
-        Math.max(...eta);
+        return;
 
-    $("tripCount").textContent =
-        new Set(
+    }
 
-            state.filteredData.map(
+    const minETA = Math.min(
 
-                r => r.date
+        ...state.filteredData.map(r => r.eta)
 
-            )
+    );
 
-        ).size;
+    const maxETA = Math.max(
 
-    $("monthlyAverage").textContent =
-        formatMinutes(avg);
+        ...state.filteredData.map(r => r.eta)
 
-    $("monthlyBest").textContent =
-        formatMinutes(best);
+    );
 
-    $("monthlyWorst").textContent =
-        formatMinutes(worst);
+    state.filteredData.forEach(row => {
 
-    const saved =
-        (worst - avg) *
-        Number($("tripCount").textContent);
+        const cell = document.createElement("div");
 
-    $("timeSavedMonth").textContent =
-        `${Math.round(saved)} min`;
+        cell.className = "heat-cell";
 
-    const score =
-        Math.max(
+        const ratio =
 
-            0,
+            (row.eta - minETA) /
+
+            (maxETA - minETA || 1);
+
+        let color;
+
+        if (ratio < .15) {
+
+            color = "#10b981";
+
+        }
+
+        else if (ratio < .30) {
+
+            color = "#34d399";
+
+        }
+
+        else if (ratio < .45) {
+
+            color = "#84cc16";
+
+        }
+
+        else if (ratio < .60) {
+
+            color = "#facc15";
+
+        }
+
+        else if (ratio < .75) {
+
+            color = "#fb923c";
+
+        }
+
+        else if (ratio < .90) {
+
+            color = "#f97316";
+
+        }
+
+        else {
+
+            color = "#ef4444";
+
+        }
+
+        cell.style.background = color;
+
+        cell.title =
+
+            `${row.hour}:${String(row.minute).padStart(2,"0")}
+ETA ${row.eta.toFixed(1)} mins`;
+
+        container.appendChild(cell);
+
+    });
+
+}
+
+/* ==========================================================
+   Part 7
+   Reliability Metrics
+========================================================== */
+
+function updateReliability() {
+
+    if (!state.filteredData.length) {
+
+        return;
+
+    }
+
+    const etas =
+
+        state.filteredData.map(r => r.eta);
+
+    const avg = average(etas);
+
+    const med = median(etas);
+
+    const p95 = percentile(etas,95);
+
+    const std = standardDeviation(etas);
+
+    const confidence = Math.max(
+
+        50,
+
+        Math.min(
+
+            99,
 
             Math.round(
 
-                100 -
-                (avg - best) * 3
+                100 - std * 4
 
             )
 
-        );
+        )
+
+    );
+
+    $("avgEtaMetric").textContent =
+
+        `${round(avg)} min`;
+
+    $("medianEtaMetric").textContent =
+
+        `${round(med)} min`;
+
+    $("p95Metric").textContent =
+
+        `${round(p95)} min`;
+
+    $("stdMetric").textContent =
+
+        `${round(std)} min`;
+
+    $("confidenceMetric").textContent =
+
+        `${confidence}%`;
+
+}
+
+
+/* ==========================================================
+   Monthly Statistics
+========================================================== */
+
+function updateMonthlyStats() {
+
+    if (!state.filteredData.length) {
+
+        return;
+
+    }
+
+    const etas =
+
+        state.filteredData.map(r => r.eta);
+
+    const avg = average(etas);
+
+    const best = Math.min(...etas);
+
+    const worst = Math.max(...etas);
+
+    $("tripCount").textContent =
+
+        state.filteredData.length;
+
+    $("monthlyAverage").textContent =
+
+        `${round(avg)} min`;
+
+    $("monthlyBest").textContent =
+
+        `${round(best)} min`;
+
+    $("monthlyWorst").textContent =
+
+        `${round(worst)} min`;
+
+    const saved =
+
+        (worst - avg) *
+
+        state.filteredData.length;
+
+    $("timeSavedMonth").textContent =
+
+        `${Math.round(saved)} min`;
+
+    const score = Math.max(
+
+        1,
+
+        Math.round(
+
+            100 -
+
+            avg
+
+        )
+
+    );
 
     $("overallScore").textContent =
+
         `${score}/100`;
 
 }
 
-/* ===========================================================
-   AUTO REFRESH
-=========================================================== */
+/* ==========================================================
+   Part 8
+   History • Calculator • Insights
+========================================================== */
 
-setInterval(async () => {
+/* ==========================================================
+   Historical Comparison
+========================================================== */
 
-    await loadData();
+function updateHistoryChart() {
 
-    renderDashboard();
+    const canvas = $("historyChart");
 
-    loadRoute();
+    if (!canvas) return;
 
-}, 60000);
+    if (state.charts.history) {
 
-/* ===========================================================
-   INITIAL ROUTE
-=========================================================== */
+        state.charts.history.destroy();
 
-setTimeout(() => {
+    }
 
-    loadRoute();
+    const groups = {};
 
-}, 1000);
+    state.filteredData.forEach(row => {
 
-/* ===========================================================
-   WINDOW RESIZE
-=========================================================== */
+        if (!groups[row.date]) {
 
-window.addEventListener(
+            groups[row.date] = [];
 
-    "resize",
+        }
 
-    () => {
+        groups[row.date].push(row.eta);
 
-        Object.values(state.charts)
+    });
 
-            .forEach(chart => {
+    const labels = Object.keys(groups).sort();
 
-                if (chart)
+    const values = labels.map(date =>
 
-                    chart.resize();
+        average(groups[date])
 
-            });
+    );
+
+    state.charts.history = new Chart(
+
+        canvas,
+
+        {
+
+            type: "line",
+
+            data: {
+
+                labels,
+
+                datasets: [
+
+                    {
+
+                        label: "Average ETA",
+
+                        data: values,
+
+                        borderColor: "#2dd4bf",
+
+                        backgroundColor:
+
+                            "rgba(45,212,191,.12)",
+
+                        borderWidth: 3,
+
+                        fill: true,
+
+                        tension: .35,
+
+                        pointRadius: 4
+
+                    }
+
+                ]
+
+            },
+
+            options: {
+
+                responsive: true,
+
+                maintainAspectRatio: false,
+
+                plugins: {
+
+                    legend: {
+
+                        display: false
+
+                    }
+
+                }
+
+            }
+
+        }
+
+    );
+
+}
+
+/* ==========================================================
+   Leave By Calculator
+========================================================== */
+
+function calculateDeparture() {
+
+    const input = $("arrivalInput");
+
+    if (!input) return;
+
+    const value = input.value;
+
+    if (!value) return;
+
+    const parts = value.split(":");
+
+    const arrivalHour = Number(parts[0]);
+
+    const arrivalMinute = Number(parts[1]);
+
+    const rec = calculateRecommendation();
+
+    if (!rec) return;
+
+    const departure = subtractMinutes(
+
+        arrivalHour,
+
+        arrivalMinute,
+
+        rec.eta
+
+    );
+
+    $("recommendedDeparture").textContent =
+
+        departure;
+
+}
+
+function setupCalculator() {
+
+    const button = $("calculateButton");
+
+    if (!button) return;
+
+    button.addEventListener(
+
+        "click",
+
+        calculateDeparture
+
+    );
+
+}
+
+/* ==========================================================
+   AI Insights
+========================================================== */
+
+function updateAIInsights() {
+
+    if (!state.filteredData.length) return;
+
+    const etas =
+
+        state.filteredData.map(r => r.eta);
+
+    const avg = average(etas);
+
+    const best = Math.min(...etas);
+
+    const worst = Math.max(...etas);
+
+    const save = Math.round(worst - best);
+
+    console.log({
+
+        average: avg,
+
+        best,
+
+        worst,
+
+        possibleSaving: save
+
+    });
+
+}
+
+/* ==========================================================
+   Route Summary
+========================================================== */
+
+function updateRouteCards() {
+
+    if (!state.filteredData.length) return;
+
+    const current = state.filteredData[0];
+
+    if ($("routeDuration")) {
+
+        $("routeDuration").textContent =
+
+            `${round(current.eta)} min`;
+
+    }
+
+    if ($("routeName")) {
+
+        $("routeName").textContent =
+
+            state.selectedDirection === "A→B"
+
+                ? "Home → Office"
+
+                : "Office → Home";
+
+    }
+
+    if ($("trafficDelay")) {
+
+        $("trafficDelay").textContent =
+
+            `${Math.max(
+
+                0,
+
+                round(
+
+                    current.eta -
+
+                    Math.min(
+
+                        ...state.filteredData.map(r=>r.eta)
+
+                    )
+
+                )
+
+            )} min`;
+
+    }
+
+}
+
+/* ==========================================================
+   Dashboard Refresh
+========================================================== */
+
+const originalRefresh = refreshDashboard;
+
+refreshDashboard = function(){
+
+    if(!state.filteredData.length){
+
+        return;
+
+    }
+
+    updateRecommendationCard();
+
+    updateHeroCards();
+
+    updateDecisionPanel();
+
+    renderTrafficChart();
+
+    renderWeeklyTrend();
+
+    renderHeatmap();
+
+    updateReliability();
+
+    updateMonthlyStats();
+
+    updateHistoryChart();
+
+    updateAIInsights();
+
+    updateRouteCards();
+
+};
+
+/* ==========================================================
+   Initialize App
+========================================================== */
+
+document.addEventListener(
+
+    "DOMContentLoaded",
+
+    ()=>{
+
+        setTodayDate();
+
+        setupCalculator();
 
     }
 
 );
+
+console.log("✓ Part 8 Loaded");
